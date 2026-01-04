@@ -511,6 +511,90 @@ function showEmailVerificationPopup(email) {
     closeAuthModal();
 }
 
+// Show user not found popup - prompts user to sign up
+function showUserNotFoundPopup() {
+    // Create popup overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'user-not-found-popup';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+    `;
+    
+    overlay.innerHTML = `
+        <div style="
+            background: var(--card-bg, #1e1e2e);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 450px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 1px solid var(--border-color, #333);
+        ">
+            <div style="
+                width: 80px;
+                height: 80px;
+                background: linear-gradient(135deg, #ef4444, #f97316);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 24px;
+            ">
+                <i class="fas fa-user-times" style="font-size: 36px; color: white;"></i>
+            </div>
+            <h2 style="color: var(--text-color, #fff); margin-bottom: 16px; font-size: 24px;">
+                🔍 User Not Found!
+            </h2>
+            <p style="color: var(--text-secondary, #aaa); margin-bottom: 24px; font-size: 16px; line-height: 1.6;">
+                We couldn't find an account with these credentials. 
+                Please check your email and password, or create a new account.
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button onclick="document.getElementById('user-not-found-popup').remove()" style="
+                    background: transparent;
+                    color: var(--text-secondary, #aaa);
+                    border: 1px solid var(--border-color, #444);
+                    padding: 14px 28px;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                " onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#444'">
+                    Try Again
+                </button>
+                <button onclick="document.getElementById('user-not-found-popup').remove(); switchAuthTab('signup');" style="
+                    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                    color: white;
+                    border: none;
+                    padding: 14px 28px;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    Sign Up Now
+                </button>
+            </div>
+            <p style="color: var(--text-secondary, #888); margin-top: 20px; font-size: 12px;">
+                Create an account to start tracking your expenses!
+            </p>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
 // Handle sign out with complete session cleanup
 async function handleSignOut() {
     try {
@@ -1001,7 +1085,16 @@ function setupAuthModalListeners() {
             try {
                 const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
                 
-                if (error) throw error;
+                if (error) {
+                    // Check if user not found or invalid credentials
+                    if (error.message.toLowerCase().includes('invalid login credentials') || 
+                        error.message.toLowerCase().includes('user not found') ||
+                        error.message.toLowerCase().includes('invalid email or password')) {
+                        showUserNotFoundPopup();
+                        return;
+                    }
+                    throw error;
+                }
                 
                 // User data will be saved to localStorage via auth state change listener
                 currentUser = data.user;

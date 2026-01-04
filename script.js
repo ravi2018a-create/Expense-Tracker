@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', function() {
     updateUI();
     setCurrentDate();
     
+    // Show welcome message
+    setTimeout(() => {
+        showToast('Welcome! Your expense data is saved locally. Use Export/Import to backup your data.', 'info');
+    }, 2000);
+    
     // Try to initialize Google APIs after a short delay
     setTimeout(() => {
         initializeGoogleAPIs();
@@ -203,18 +208,20 @@ function setupDemoMode() {
 function showDemoModeMessage() {
     const signInButton = document.getElementById('signInButton');
     if (signInButton) {
-        signInButton.innerHTML = '<i class="fas fa-info-circle"></i> Demo Mode';
-        signInButton.style.background = 'var(--info-color)';
-        signInButton.addEventListener('click', function() {
-            showToast('Demo Mode: To enable Google Drive sync, please configure Google API credentials in script.js', 'info');
-        });
+        signInButton.innerHTML = '<i class="fas fa-download"></i> Export Data';
+        signInButton.style.background = 'var(--success-color)';
+        signInButton.addEventListener('click', exportToJSON);
     }
     
     // Hide sync status
     const syncStatus = document.getElementById('syncStatus');
     if (syncStatus) {
-        syncStatus.style.display = 'none';
+        syncStatus.innerHTML = '<i class="fas fa-hdd"></i> Local Storage';
+        syncStatus.style.color = 'var(--info-color)';
     }
+    
+    // Add import button
+    addImportButton();
 }
 
 // Handle Google Sign-in
@@ -1004,19 +1011,77 @@ function getCategoryName(category) {
     return names[category] || 'Other';
 }
 
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
+// Export/Import functionality for everyone
+function exportToJSON() {
+    const data = {
+        transactions: transactions,
+        exportDate: new Date().toISOString(),
+        version: '1.0.0'
+    };
     
-    document.body.appendChild(toast);
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
     
-    setTimeout(() => {
-        toast.style.animation = 'slideInRight 0.3s ease-out reverse';
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
-    }, 3000);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `expense-tracker-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    
+    showToast('Expense data exported successfully!', 'success');
+}
+
+function addImportButton() {
+    const signInButton = document.getElementById('signInButton');
+    if (signInButton && signInButton.parentNode) {
+        const importButton = document.createElement('button');
+        importButton.innerHTML = '<i class="fas fa-upload"></i> Import Data';
+        importButton.className = 'sign-in-btn';
+        importButton.style.background = 'var(--warning-color)';
+        importButton.style.marginLeft = '0.5rem';
+        
+        // Create hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', handleFileImport);
+        
+        importButton.addEventListener('click', () => fileInput.click());
+        
+        signInButton.parentNode.appendChild(importButton);
+        signInButton.parentNode.appendChild(fileInput);
+    }
+}
+
+function handleFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            if (data.transactions && Array.isArray(data.transactions)) {
+                // Merge with existing data
+                const existingIds = new Set(transactions.map(t => t.id));
+                const newTransactions = data.transactions.filter(t => !existingIds.has(t.id));
+                
+                transactions.push(...newTransactions);
+                saveTransactions();
+                updateUI();
+                
+                showToast(`Imported ${newTransactions.length} new transactions!`, 'success');
+            } else {
+                throw new Error('Invalid file format');
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showToast('Failed to import data. Please check file format.', 'error');
+        }
+    };
+    
+    reader.readAsText(file);
 }
 
 // Load Google APIs when available
@@ -1070,3 +1135,18 @@ window.onload = function() {
     // Start checking after scripts have had time to load
     setTimeout(checkAPIs, 1000);
 };
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideInRight 0.3s ease-out reverse';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
+}

@@ -12,18 +12,21 @@ let transactions = [];
 let currentView = 'daily';
 let expenseChart = null;
 let currentEditingId = null;
+let currentUserId = null; // Add user ID tracking
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
     setupEventListeners();
+    checkOrCreateUser(); // Check for existing user or create new one
     loadTransactions();
     updateUI();
     setCurrentDate();
     
     // Show welcome message
     setTimeout(() => {
-        showToast('Welcome! Your expense data is saved locally. Use Export/Import to backup your data.', 'info');
+        const userName = localStorage.getItem('userName') || 'User';
+        showToast(`Welcome ${userName}! Your expenses are private and saved securely.`, 'success');
     }, 2000);
     
     // Try to initialize Google APIs after a short delay
@@ -31,6 +34,53 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeGoogleAPIs();
     }, 1000);
 });
+
+// User management for multiple users
+function checkOrCreateUser() {
+    currentUserId = localStorage.getItem('userId');
+    
+    if (!currentUserId) {
+        // New user - create account
+        createNewUser();
+    } else {
+        // Existing user - load their data
+        loadUserProfile();
+    }
+}
+
+function createNewUser() {
+    // Generate unique user ID
+    currentUserId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    
+    // Ask for user name
+    const userName = prompt('Welcome! Please enter your name:') || 'User';
+    
+    // Save user info with proper keys
+    localStorage.setItem('userId', currentUserId);
+    localStorage.setItem('userName', userName);
+    localStorage.setItem(`userName_${currentUserId}`, userName); // For user listing
+    
+    // Update UI
+    updateUserDisplay();
+    
+    showToast(`Account created for ${userName}! Your data is private.`, 'success');
+}
+
+function loadUserProfile() {
+    const userName = localStorage.getItem('userName') || 'User';
+    updateUserDisplay();
+}
+
+function updateUserDisplay() {
+    const userName = localStorage.getItem('userName') || 'User';
+    
+    // Update connection status to show current user
+    const connectionStatus = document.getElementById('connectionStatus');
+    if (connectionStatus) {
+        connectionStatus.innerHTML = `<small>Logged in as: ${userName}</small>`;
+        connectionStatus.style.color = 'var(--success-color)';
+    }
+}
 
 // Initialize Google APIs
 function initializeApp() {
@@ -208,20 +258,88 @@ function setupDemoMode() {
 function showDemoModeMessage() {
     const signInButton = document.getElementById('signInButton');
     if (signInButton) {
-        signInButton.innerHTML = '<i class="fas fa-download"></i> Export Data';
-        signInButton.style.background = 'var(--success-color)';
-        signInButton.addEventListener('click', exportToJSON);
+        signInButton.innerHTML = '<i class="fas fa-user-plus"></i> Switch User';
+        signInButton.style.background = 'var(--primary-color)';
+        signInButton.addEventListener('click', switchUser);
     }
     
-    // Hide sync status
+    // Update sync status
     const syncStatus = document.getElementById('syncStatus');
     if (syncStatus) {
-        syncStatus.innerHTML = '<i class="fas fa-hdd"></i> Local Storage';
-        syncStatus.style.color = 'var(--info-color)';
+        syncStatus.innerHTML = '<i class="fas fa-hdd"></i> Private Storage';
+        syncStatus.style.color = 'var(--success-color)';
     }
     
-    // Add import button
-    addImportButton();
+    // Add export button
+    addExportButton();
+}
+
+function switchUser() {
+    const currentName = localStorage.getItem('userName') || 'User';
+    const action = confirm(`Current user: ${currentName}\n\nDo you want to:\nOK = Switch to different user\nCancel = Create new user`);
+    
+    if (action) {
+        // Switch to existing user
+        const existingUsers = getAllUsers();
+        if (existingUsers.length > 1) {
+            showUserSelector(existingUsers);
+        } else {
+            alert('No other users found. Create a new user instead.');
+            createNewUser();
+        }
+    } else {
+        // Create new user
+        createNewUser();
+    }
+}
+
+function getAllUsers() {
+    const users = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('userName_user_')) {
+            const userId = key.replace('userName_', '');
+            const userName = localStorage.getItem(key);
+            users.push({ id: userId, name: userName });
+        }
+    }
+    return users;
+}
+
+function showUserSelector(users) {
+    const userList = users.map((user, index) => `${index + 1}. ${user.name}`).join('\n');
+    const choice = prompt(`Select user:\n${userList}\n\nEnter number (1-${users.length}):`);
+    
+    const selectedIndex = parseInt(choice) - 1;
+    if (selectedIndex >= 0 && selectedIndex < users.length) {
+        const selectedUser = users[selectedIndex];
+        
+        // Switch to selected user
+        currentUserId = selectedUser.id;
+        localStorage.setItem('userId', currentUserId);
+        localStorage.setItem('userName', selectedUser.name);
+        
+        // Reload data
+        loadTransactions();
+        updateUI();
+        updateUserDisplay();
+        
+        showToast(`Switched to ${selectedUser.name}'s account`, 'success');
+    }
+}
+
+function addExportButton() {
+    const signInButton = document.getElementById('signInButton');
+    if (signInButton && signInButton.parentNode) {
+        const exportButton = document.createElement('button');
+        exportButton.innerHTML = '<i class="fas fa-download"></i> Export';
+        exportButton.className = 'sign-in-btn';
+        exportButton.style.background = 'var(--success-color)';
+        exportButton.style.marginLeft = '0.5rem';
+        exportButton.addEventListener('click', exportToJSON);
+        
+        signInButton.parentNode.appendChild(exportButton);
+    }
 }
 
 // Handle Google Sign-in
@@ -534,14 +652,21 @@ function switchView(view) {
     updateChart();
 }
 
-// Data persistence
+// Data persistence with user separation
 function saveTransactions() {
-    const key = currentUser ? `transactions_${currentUser.id}` : 'transactions';
+    if (!currentUserId) return;
+    
+    const key = `transactions_${currentUserId}`;
     localStorage.setItem(key, JSON.stringify(transactions));
+    
+    // Also save user's last activity
+    localStorage.setItem(`lastActivity_${currentUserId}`, new Date().toISOString());
 }
 
 function loadTransactions() {
-    const key = currentUser ? `transactions_${currentUser.id}` : 'transactions';
+    if (!currentUserId) return;
+    
+    const key = `transactions_${currentUserId}`;
     const saved = localStorage.getItem(key);
     transactions = saved ? JSON.parse(saved) : [];
 }
@@ -1013,7 +1138,10 @@ function getCategoryName(category) {
 
 // Export/Import functionality for everyone
 function exportToJSON() {
+    const userName = localStorage.getItem('userName') || 'User';
     const data = {
+        userName: userName,
+        userId: currentUserId,
         transactions: transactions,
         exportDate: new Date().toISOString(),
         version: '1.0.0'
@@ -1024,10 +1152,10 @@ function exportToJSON() {
     
     const link = document.createElement('a');
     link.href = URL.createObjectURL(dataBlob);
-    link.download = `expense-tracker-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `${userName}-expenses-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     
-    showToast('Expense data exported successfully!', 'success');
+    showToast(`${userName}'s expense data exported successfully!`, 'success');
 }
 
 function addImportButton() {

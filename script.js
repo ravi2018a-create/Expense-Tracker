@@ -915,6 +915,50 @@ function signOut() {
     }
 }
 
+// Update category options based on type (expense/income)
+function updateCategoryOptions(typeSelectId, categorySelectId, customGroupId) {
+    const typeSelect = document.getElementById(typeSelectId);
+    const categorySelect = document.getElementById(categorySelectId);
+    const customGroup = document.getElementById(customGroupId);
+    
+    if (!typeSelect || !categorySelect) return;
+    
+    const type = typeSelect.value;
+    const currentValue = categorySelect.value;
+    
+    // Clear current options
+    categorySelect.innerHTML = '';
+    
+    if (type === 'income') {
+        // Income categories: Salary and Other
+        categorySelect.innerHTML = `
+            <option value="">Select category</option>
+            <option value="salary">💰 Salary</option>
+            <option value="other_income">📋 Other</option>
+        `;
+        // Show custom input if "Other" was selected
+        if (currentValue === 'other_income' && customGroup) {
+            customGroup.style.display = 'block';
+        }
+    } else {
+        // Expense categories
+        categorySelect.innerHTML = `
+            <option value="">Select category</option>
+            <option value="food">🍕 Food</option>
+            <option value="transport">🚗 Transport</option>
+            <option value="shopping">🛒 Shopping</option>
+            <option value="entertainment">🎬 Entertainment</option>
+            <option value="bills">💡 Bills</option>
+            <option value="health">🏥 Health</option>
+            <option value="other">📋 Other</option>
+        `;
+        // Hide custom income source for expenses
+        if (customGroup) {
+            customGroup.style.display = 'none';
+        }
+    }
+}
+
 // Setup event listeners
 function setupEventListeners() {
     console.log('🔧 Setting up event listeners...');
@@ -989,6 +1033,29 @@ function setupEventListeners() {
         console.warn('❌ Transaction form not found');
     }
     
+    // Type selector change - switch categories based on income/expense
+    const typeSelect = document.getElementById('type');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', () => {
+            updateCategoryOptions('type', 'category', 'customIncomeSourceGroup');
+        });
+        console.log('✅ Type selector listener added');
+    }
+    
+    // Category selector change - show/hide custom income source
+    const categorySelect = document.getElementById('category');
+    if (categorySelect) {
+        categorySelect.addEventListener('change', () => {
+            const customGroup = document.getElementById('customIncomeSourceGroup');
+            const type = document.getElementById('type').value;
+            if (type === 'income' && categorySelect.value === 'other_income') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+            }
+        });
+    }
+    
     // Edit form
     const editForm = document.getElementById('editTransactionForm');
     if (editForm) {
@@ -999,6 +1066,28 @@ function setupEventListeners() {
         console.log('✅ Edit form listener added');
     } else {
         console.log('ℹ️ Edit form not found (normal on page load)');
+    }
+    
+    // Edit type selector change
+    const editTypeSelect = document.getElementById('editType');
+    if (editTypeSelect) {
+        editTypeSelect.addEventListener('change', () => {
+            updateCategoryOptions('editType', 'editCategory', 'editCustomIncomeSourceGroup');
+        });
+    }
+    
+    // Edit category selector change
+    const editCategorySelect = document.getElementById('editCategory');
+    if (editCategorySelect) {
+        editCategorySelect.addEventListener('change', () => {
+            const customGroup = document.getElementById('editCustomIncomeSourceGroup');
+            const type = document.getElementById('editType').value;
+            if (type === 'income' && editCategorySelect.value === 'other_income') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+            }
+        });
     }
     
     // Modal controls
@@ -1300,9 +1389,17 @@ async function handleAddTransaction(e) {
     // Get form values directly from DOM elements
     const description = document.getElementById('description').value.trim();
     const amount = parseFloat(document.getElementById('amount').value);
-    const category = document.getElementById('category').value;
+    let category = document.getElementById('category').value;
     const type = document.getElementById('type').value;
     const dateInput = document.getElementById('date').value;
+    
+    // If income type and "Other" selected, use custom income source name
+    if (type === 'income' && category === 'other_income') {
+        const customSource = document.getElementById('customIncomeSource').value.trim();
+        if (customSource) {
+            category = customSource; // Use custom name as category
+        }
+    }
     
     // Ensure date is in YYYY-MM-DD format
     let date = dateInput;
@@ -1453,6 +1550,12 @@ async function handleAddTransaction(e) {
         // Always reset form after successful save (localStorage backup ensures data isn't lost)
         e.target.reset();
         setCurrentDate();
+        
+        // Reset category options back to expense and hide custom income source
+        updateCategoryOptions('type', 'category', 'customIncomeSourceGroup');
+        document.getElementById('customIncomeSource').value = '';
+        document.getElementById('customIncomeSourceGroup').style.display = 'none';
+        
         console.log('✅ Transaction processing complete');
     } else {
         console.log('❌ Transaction validation failed');
@@ -1497,6 +1600,22 @@ function editTransaction(id) {
     document.getElementById('editType').value = transaction.type;
     document.getElementById('editDate').value = transaction.date;
     
+    // Update category options based on type
+    updateCategoryOptions('editType', 'editCategory', 'editCustomIncomeSourceGroup');
+    
+    // Set the category value after options are updated
+    setTimeout(() => {
+        const editCategory = document.getElementById('editCategory');
+        // Check if it's a custom income category
+        if (transaction.type === 'income' && !['salary', 'other_income'].includes(transaction.category)) {
+            editCategory.value = 'other_income';
+            document.getElementById('editCustomIncomeSource').value = transaction.category;
+            document.getElementById('editCustomIncomeSourceGroup').style.display = 'block';
+        } else {
+            editCategory.value = transaction.category;
+        }
+    }, 10);
+    
     // Show modal
     document.getElementById('editModal').style.display = 'flex';
     document.getElementById('editModal').classList.add('fade-in');
@@ -1508,12 +1627,23 @@ async function handleEditTransaction(e) {
     const id = document.getElementById('editId').value;
     const existingTransaction = transactions.find(t => t.id === id);
     
+    let category = document.getElementById('editCategory').value;
+    const type = document.getElementById('editType').value;
+    
+    // If income type and "Other" selected, use custom income source name
+    if (type === 'income' && category === 'other_income') {
+        const customSource = document.getElementById('editCustomIncomeSource').value.trim();
+        if (customSource) {
+            category = customSource; // Use custom name as category
+        }
+    }
+    
     const updatedTransaction = {
         id: id,
         description: document.getElementById('editDescription').value,
         amount: parseFloat(document.getElementById('editAmount').value),
-        category: document.getElementById('editCategory').value,
-        type: document.getElementById('editType').value,
+        category: category,
+        type: type,
         date: document.getElementById('editDate').value,
         createdAt: existingTransaction?.createdAt || existingTransaction?.created_at || new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -2262,9 +2392,12 @@ function getCategoryName(category) {
         bills: 'Bills',
         health: 'Health',
         income: 'Income',
+        salary: 'Salary',
+        other_income: 'Other Income',
         other: 'Other'
     };
-    return names[category] || 'Other';
+    // Handle custom income source names (stored as category)
+    return names[category] || category || 'Other';
 }
 
 // Export/Import functionality for everyone

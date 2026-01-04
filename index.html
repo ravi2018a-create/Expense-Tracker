@@ -10,8 +10,6 @@
     <link rel="stylesheet" href="./styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://apis.google.com/js/api.js" onload="window.gapiLoaded = true; console.log('Google API script loaded')"></script>
-    <script src="https://accounts.google.com/gsi/client" onload="window.gsiLoaded = true; console.log('Google Identity script loaded')"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -33,10 +31,6 @@
                             <i class="fas fa-user"></i>
                             Sign In for Database
                         </button>
-                        <div id="signInButton" class="sign-in-btn" style="display: none;">
-                            <i class="fab fa-google"></i>
-                            Sign in with Google
-                        </div>
                         <div id="userInfo" class="user-info" style="display: none;">
                             <span id="userEmail"></span>
                             <button id="signOutButton" class="sign-out-btn">

@@ -2,6 +2,11 @@
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
+// Supabase Configuration (for future backend upgrade)
+const SUPABASE_URL = 'https://mxqwbdvdozqqvmycmdtk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14cXdiZHZkb3pxcXZteWNtZHRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NTEyMzQsImV4cCI6MjA1MTUyNzIzNH0.6TYzFGz1X2VJ8K3bWvFy2qMjLxR1pYwZ7XcD9fGtVos';
+let supabaseClient = null;
+
 // App State
 let gapi;
 let google;
@@ -16,6 +21,12 @@ let currentUserId = null; // Add user ID tracking
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Supabase for future backend features
+    if (typeof window.supabase !== 'undefined') {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('Supabase ready for backend features');
+    }
+    
     initializeApp();
     setupEventListeners();
     checkOrCreateUser(); // Check for existing user or create new one

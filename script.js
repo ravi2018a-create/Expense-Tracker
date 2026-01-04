@@ -1910,30 +1910,39 @@ function updateUI() {
 
 function updateCurrentPeriodDisplay() {
     const displayElement = document.getElementById('currentPeriodDisplay');
+    const dateDetails = document.getElementById('currentDateDetails');
     if (!displayElement) return;
     
     const now = new Date();
-    const monthFilter = document.getElementById('monthFilter').value;
-    const yearFilter = document.getElementById('yearFilter').value;
+    const monthFilter = document.getElementById('monthFilter')?.value;
+    const yearFilter = document.getElementById('yearFilter')?.value;
     
     if (currentView === 'daily') {
         if (monthFilter) {
             const filterDate = new Date(monthFilter + '-01');
-            displayElement.textContent = `Daily Expenses - ${filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+            displayElement.textContent = `Daily View`;
+            if (dateDetails) dateDetails.textContent = filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         } else {
-            displayElement.textContent = `Today's Expenses - ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+            displayElement.textContent = `Today's Summary`;
+            if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         }
     } else if (currentView === 'monthly') {
         if (monthFilter) {
             const filterDate = new Date(monthFilter + '-01');
-            displayElement.textContent = `Monthly Expenses - ${filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}`;
+            displayElement.textContent = `Monthly Summary`;
+            if (dateDetails) dateDetails.textContent = filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
         } else {
-            displayElement.textContent = `Monthly Expenses - ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}`;
+            displayElement.textContent = `This Month's Summary`;
+            if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
         }
     } else if (currentView === 'yearly') {
         const year = yearFilter || now.getFullYear().toString();
-        displayElement.textContent = `Yearly Expenses - ${year}`;
+        displayElement.textContent = `Yearly Summary`;
+        if (dateDetails) dateDetails.textContent = `Year ${year}`;
     }
+    
+    // Update transaction count
+    updateTransactionCount();
 }
 
 function updateSummary() {
@@ -1951,6 +1960,24 @@ function updateSummary() {
     const balance = totalIncome - totalExpenses;
     
     console.log('💰 Summary calculations:', { totalIncome, totalExpenses, balance });
+    
+    // Update labels based on current view
+    const incomeLabel = document.getElementById('incomeLabel');
+    const expenseLabel = document.getElementById('expenseLabel');
+    const balanceLabel = document.getElementById('balanceLabel');
+    
+    let periodText = '';
+    if (currentView === 'daily') {
+        periodText = "Today's";
+    } else if (currentView === 'monthly') {
+        periodText = "Monthly";
+    } else if (currentView === 'yearly') {
+        periodText = "Yearly";
+    }
+    
+    if (incomeLabel) incomeLabel.textContent = `${periodText} Income`;
+    if (expenseLabel) expenseLabel.textContent = `${periodText} Expenses`;
+    if (balanceLabel) balanceLabel.textContent = `${periodText} Balance`;
     
     // Check if elements exist before updating
     const incomeEl = document.getElementById('totalIncome');

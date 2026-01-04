@@ -2050,8 +2050,18 @@ function openAuthModal() {
     const modal = document.getElementById('authModal');
     if (modal) {
         modal.style.display = 'flex';
+        
+        // Check if first-time visitor - show signup instead of signin
+        const hasVisitedBefore = localStorage.getItem('hasVisitedBefore');
+        if (!hasVisitedBefore) {
+            switchAuthTab('signup');
+            localStorage.setItem('hasVisitedBefore', 'true');
+        } else {
+            switchAuthTab('signin');
+        }
+        
         // Focus on first input
-        const firstInput = modal.querySelector('input');
+        const firstInput = modal.querySelector('input:not([style*="display: none"])');
         if (firstInput) {
             setTimeout(() => firstInput.focus(), 100);
         }

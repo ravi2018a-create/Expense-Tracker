@@ -418,7 +418,8 @@ async function handleSignUp(email, password, fullName) {
         if (error) throw error;
         
         if (data.user && !data.session) {
-            showToast('Account created! Please check your email to verify. After clicking the verification link, return to https://expense-tracker-nh2v.vercel.app to continue.', 'success');
+            // Show email verification popup
+            showEmailVerificationPopup(email);
         } else {
             currentUser = data.user;
             updateUIForAuth();
@@ -430,6 +431,84 @@ async function handleSignUp(email, password, fullName) {
         console.error('Sign up error:', error);
         showToast('Sign up failed: ' + error.message, 'error');
     }
+}
+
+// Show email verification popup
+function showEmailVerificationPopup(email) {
+    // Create popup overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'email-verification-popup';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+    `;
+    
+    overlay.innerHTML = `
+        <div style="
+            background: var(--card-bg, #1e1e2e);
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 450px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 1px solid var(--border-color, #333);
+        ">
+            <div style="
+                width: 80px;
+                height: 80px;
+                background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0 auto 24px;
+            ">
+                <i class="fas fa-envelope" style="font-size: 36px; color: white;"></i>
+            </div>
+            <h2 style="color: var(--text-color, #fff); margin-bottom: 16px; font-size: 24px;">
+                📧 Check Your Email!
+            </h2>
+            <p style="color: var(--text-secondary, #aaa); margin-bottom: 12px; font-size: 16px; line-height: 1.6;">
+                We've sent a verification link to:
+            </p>
+            <p style="color: #4f46e5; font-weight: 600; font-size: 18px; margin-bottom: 20px;">
+                ${email}
+            </p>
+            <p style="color: var(--text-secondary, #aaa); margin-bottom: 24px; font-size: 14px; line-height: 1.6;">
+                Please click the link in your email to verify your account. 
+                After verification, you can sign in with your credentials.
+            </p>
+            <button onclick="document.getElementById('email-verification-popup').remove()" style="
+                background: linear-gradient(135deg, #4f46e5, #7c3aed);
+                color: white;
+                border: none;
+                padding: 14px 40px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 0.2s, box-shadow 0.2s;
+            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                Got it!
+            </button>
+            <p style="color: var(--text-secondary, #888); margin-top: 20px; font-size: 12px;">
+                Didn't receive the email? Check your spam folder.
+            </p>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // Close auth modal if open
+    closeAuthModal();
 }
 
 // Handle sign out with complete session cleanup

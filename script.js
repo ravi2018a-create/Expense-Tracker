@@ -270,8 +270,8 @@ function showDemoModeMessage() {
         syncStatus.style.color = 'var(--success-color)';
     }
     
-    // Add export button
-    addExportButton();
+    // Add single download button (remove duplicate)
+    addDownloadButton();
 }
 
 function switchUser() {
@@ -328,17 +328,24 @@ function showUserSelector(users) {
     }
 }
 
-function addExportButton() {
+function addDownloadButton() {
     const signInButton = document.getElementById('signInButton');
     if (signInButton && signInButton.parentNode) {
-        const exportButton = document.createElement('button');
-        exportButton.innerHTML = '<i class="fas fa-download"></i> Export';
-        exportButton.className = 'sign-in-btn';
-        exportButton.style.background = 'var(--success-color)';
-        exportButton.style.marginLeft = '0.5rem';
-        exportButton.addEventListener('click', exportToJSON);
+        // Check if download button already exists to avoid duplicates
+        const existingDownload = document.getElementById('downloadButton');
+        if (existingDownload) {
+            return; // Don't add duplicate
+        }
         
-        signInButton.parentNode.appendChild(exportButton);
+        const downloadButton = document.createElement('button');
+        downloadButton.id = 'downloadButton';
+        downloadButton.innerHTML = '<i class="fas fa-download"></i> Download Expenses';
+        downloadButton.className = 'sign-in-btn';
+        downloadButton.style.background = 'var(--success-color)';
+        downloadButton.style.marginLeft = '0.5rem';
+        downloadButton.addEventListener('click', exportToJSON);
+        
+        signInButton.parentNode.appendChild(downloadButton);
     }
 }
 
@@ -1093,9 +1100,9 @@ function showSyncStatus(status) {
 
 // Utility functions
 function formatCurrency(amount) {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'USD'
+        currency: 'INR'
     }).format(amount);
 }
 
@@ -1155,13 +1162,20 @@ function exportToJSON() {
     link.download = `${userName}-expenses-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     
-    showToast(`${userName}'s expense data exported successfully!`, 'success');
+    showToast(`${userName}'s expenses downloaded successfully!`, 'success');
 }
 
 function addImportButton() {
     const signInButton = document.getElementById('signInButton');
     if (signInButton && signInButton.parentNode) {
+        // Check if import button already exists to avoid duplicates
+        const existingImport = document.getElementById('importButton');
+        if (existingImport) {
+            return; // Don't add duplicate
+        }
+        
         const importButton = document.createElement('button');
+        importButton.id = 'importButton';
         importButton.innerHTML = '<i class="fas fa-upload"></i> Import Data';
         importButton.className = 'sign-in-btn';
         importButton.style.background = 'var(--warning-color)';

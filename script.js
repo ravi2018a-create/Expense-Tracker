@@ -1502,10 +1502,12 @@ function editTransaction(id) {
     document.getElementById('editModal').classList.add('fade-in');
 }
 
-function handleEditTransaction(e) {
+async function handleEditTransaction(e) {
     e.preventDefault();
     
     const id = document.getElementById('editId').value;
+    const existingTransaction = transactions.find(t => t.id === id);
+    
     const updatedTransaction = {
         id: id,
         description: document.getElementById('editDescription').value,
@@ -1513,32 +1515,140 @@ function handleEditTransaction(e) {
         category: document.getElementById('editCategory').value,
         type: document.getElementById('editType').value,
         date: document.getElementById('editDate').value,
-        createdAt: transactions.find(t => t.id === id)?.createdAt || new Date().toISOString(),
+        createdAt: existingTransaction?.createdAt || existingTransaction?.created_at || new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
     
     if (validateTransaction(updatedTransaction)) {
         const index = transactions.findIndex(t => t.id === id);
         if (index !== -1) {
+            // Update in Supabase if authenticated
+            if (currentUser && supabaseClient) {
+                try {
+                    console.log('📤 Updating transaction in database...');
+                    
+                    // Get access token
+                    const authData = localStorage.getItem('expense-tracker-auth');
+                    let accessToken = null;
+                    
+                    if (authData) {
+                        try {
+                            const parsed = JSON.parse(authData);
+                            accessToken = parsed?.access_token;
+                        } catch (e) {
+                            console.error('❌ Error parsing auth data:', e);
+                        }
+                    }
+                    
+                    if (!accessToken) {
+                        console.error('❌ No access token available');
+                        showToast('Authentication error - please sign in again', 'error');
+                        return;
+                    }
+                    
+                    const updateData = {
+                        description: updatedTransaction.description,
+                        amount: updatedTransaction.amount,
+                        category: updatedTransaction.category,
+                        type: updatedTransaction.type,
+                        date: updatedTransaction.date
+                    };
+                    
+                    const response = await fetch(`${SUPABASE_URL}/rest/v1/transactions?id=eq.${id}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Prefer': 'return=representation'
+                        },
+                        body: JSON.stringify(updateData)
+                    });
+                    
+                    console.log('📥 Update response status:', response.status);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('❌ Database update failed:', response.status, errorText);
+                        showToast('Database error: ' + errorText, 'error');
+                        return;
+                    }
+                    
+                    console.log('✅ Database update successful!');
+                    
+                } catch (error) {
+                    console.error('❌ Error updating in database:', error);
+                    showToast('Error saving to database: ' + error.message, 'error');
+                    return;
+                }
+            }
+            
+            // Update local array
             transactions[index] = updatedTransaction;
             saveTransactions();
             updateUI();
             closeEditModal();
             showToast('Transaction updated successfully!', 'success');
-            
-            // Data automatically syncs to Supabase database when authenticated
         }
     }
 }
 
-function deleteTransaction(id) {
+async function deleteTransaction(id) {
     if (confirm('Are you sure you want to delete this transaction?')) {
+        // Delete from Supabase if authenticated
+        if (currentUser && supabaseClient) {
+            try {
+                console.log('🗑️ Deleting transaction from database...');
+                
+                // Get access token
+                const authData = localStorage.getItem('expense-tracker-auth');
+                let accessToken = null;
+                
+                if (authData) {
+                    try {
+                        const parsed = JSON.parse(authData);
+                        accessToken = parsed?.access_token;
+                    } catch (e) {
+                        console.error('❌ Error parsing auth data:', e);
+                    }
+                }
+                
+                if (!accessToken) {
+                    console.error('❌ No access token available');
+                    showToast('Authentication error - please sign in again', 'error');
+                    return;
+                }
+                
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/transactions?id=eq.${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                console.log('📥 Delete response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Database delete failed:', response.status, errorText);
+                    showToast('Database error: ' + errorText, 'error');
+                    return;
+                }
+                
+                console.log('✅ Database delete successful!');
+                
+            } catch (error) {
+                console.error('❌ Error deleting from database:', error);
+                showToast('Error deleting from database: ' + error.message, 'error');
+                return;
+            }
+        }
+        
         transactions = transactions.filter(t => t.id !== id);
         saveTransactions();
         updateUI();
         showToast('Transaction deleted successfully!', 'success');
-        
-        // Data automatically syncs to Supabase database when authenticated
     }
 }
 

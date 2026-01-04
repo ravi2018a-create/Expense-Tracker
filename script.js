@@ -3,8 +3,8 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
 // Supabase Configuration (for future backend upgrade)
-const SUPABASE_URL = 'https://mxqwbdvdozqqvmycmdtk.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im14cXdiZHZkb3pxcXZteWNtZHRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU5NTEyMzQsImV4cCI6MjA1MTUyNzIzNH0.6TYzFGz1X2VJ8K3bWvFy2qMjLxR1pYwZ7XcD9fGtVos';
+const SUPABASE_URL = 'https://hqfzyvfwuvhififooakv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_jCWTGr4jb5IhBL5-WDGwaA_HmdMTcYO';
 let supabaseClient = null;
 
 // App State

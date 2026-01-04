@@ -60,6 +60,7 @@ let currentUser = null;
 let transactions = [];
 let currentView = 'daily';
 let expenseChart = null;
+let incomeChart = null;
 let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
 
@@ -1845,6 +1846,11 @@ function clearFilters() {
 
 // Chart management
 function updateChart() {
+    updateExpenseChart();
+    updateIncomeChart();
+}
+
+function updateExpenseChart() {
     const ctx = document.getElementById('expenseChart');
     if (!ctx) return;
     
@@ -1865,10 +1871,34 @@ function updateChart() {
     
     const labels = Object.keys(categoryData).map(cat => getCategoryName(cat));
     const data = Object.values(categoryData);
-    const colors = [
-        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
-        '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'
+    const expenseColors = [
+        '#FF6384', '#FF9F40', '#ef4444', '#f97316',
+        '#dc2626', '#fb923c', '#f87171', '#fca5a5'
     ];
+    
+    // Show empty state if no expenses
+    if (data.length === 0) {
+        expenseChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['No expenses'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: ['#374151'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+        return;
+    }
     
     expenseChart = new Chart(ctx, {
         type: 'doughnut',
@@ -1876,7 +1906,7 @@ function updateChart() {
             labels: labels,
             datasets: [{
                 data: data,
-                backgroundColor: colors,
+                backgroundColor: expenseColors,
                 borderWidth: 0,
                 hoverBorderWidth: 3,
                 hoverBorderColor: '#fff'
@@ -1887,9 +1917,99 @@ function updateChart() {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: 'right',
+                    position: 'bottom',
                     labels: {
-                        padding: 20,
+                        padding: 15,
+                        usePointStyle: true,
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary')
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = formatCurrency(context.raw);
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.raw / total) * 100).toFixed(1);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateIncomeChart() {
+    const ctx = document.getElementById('incomeChart');
+    if (!ctx) return;
+    
+    // Destroy existing chart
+    if (incomeChart) {
+        incomeChart.destroy();
+    }
+    
+    const filteredTransactions = getFilteredTransactions();
+    const incomes = filteredTransactions.filter(t => t.type === 'income');
+    
+    // Group by category
+    const categoryData = {};
+    incomes.forEach(transaction => {
+        const category = transaction.category;
+        categoryData[category] = (categoryData[category] || 0) + transaction.amount;
+    });
+    
+    const labels = Object.keys(categoryData).map(cat => getCategoryName(cat));
+    const data = Object.values(categoryData);
+    const incomeColors = [
+        '#22c55e', '#36A2EB', '#10b981', '#14b8a6',
+        '#06b6d4', '#0ea5e9', '#34d399', '#6ee7b7'
+    ];
+    
+    // Show empty state if no income
+    if (data.length === 0) {
+        incomeChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['No income'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: ['#374151'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+        return;
+    }
+    
+    incomeChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: incomeColors,
+                borderWidth: 0,
+                hoverBorderWidth: 3,
+                hoverBorderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
                         usePointStyle: true,
                         color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary')
                     }

@@ -583,9 +583,42 @@ body {
     margin-bottom: 2rem;
 }
 
+.charts-wrapper {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+}
+
+.chart-box {
+    background: var(--card-bg, #1e1e2e);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color, #333);
+}
+
+.chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .chart-container {
     max-width: 100%;
-    height: 400px;
+    height: 300px;
+}
+
+@media (max-width: 768px) {
+    .charts-wrapper {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
 }
 
 /* Current Period Header - Now positioned after header */

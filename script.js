@@ -417,15 +417,15 @@ async function handleSignUp(email, password, fullName) {
         
         if (error) throw error;
         
-        if (data.user && !data.session) {
-            // Show email verification popup
-            showEmailVerificationPopup(email);
-        } else {
+        // Since email confirmation is disabled, user should be signed in directly
+        if (data.user) {
             currentUser = data.user;
+            currentUserId = data.user.id;
             updateUIForAuth();
+            closeAuthModal();
             await loadTransactions();
             updateUI();
-            showToast('Account created and signed in!', 'success');
+            showToast('🎉 Account created successfully! Welcome!', 'success');
         }
     } catch (error) {
         console.error('Sign up error:', error);

@@ -3,8 +3,10 @@
     --primary-color: #667eea;
     --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     --secondary-color: #f093fb;
+    --accent-color: #764ba2;
     --background-color: #f8fafc;
     --surface-color: #ffffff;
+    --text-color: #1a202c;
     --text-primary: #1a202c;
     --text-secondary: #718096;
     --border-color: #e2e8f0;
@@ -14,19 +16,122 @@
     --error-color: #f56565;
     --warning-color: #ed8936;
     --info-color: #4299e1;
+    --input-bg: #ffffff;
+    --card-bg: #ffffff;
+    --hover-bg: rgba(102, 126, 234, 0.1);
 }
 
 [data-theme="dark"] {
     --primary-color: #667eea;
     --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     --secondary-color: #f093fb;
+    --accent-color: #764ba2;
     --background-color: #1a202c;
     --surface-color: #2d3748;
+    --text-color: #f7fafc;
     --text-primary: #f7fafc;
     --text-secondary: #a0aec0;
     --border-color: #4a5568;
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    --success-color: #68d391;
+    --error-color: #fc8181;
+    --warning-color: #f6ad55;
+    --info-color: #63b3ed;
+    --input-bg: #374151;
+    --card-bg: #374151;
+    --hover-bg: rgba(102, 126, 234, 0.2);
+}
+
+/* Dark mode enhancements for current period header */
+[data-theme="dark"] .current-period-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+    border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+[data-theme="dark"] .current-period-header .period-stats span {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Dark mode navigation and buttons */
+[data-theme="dark"] .nav-btn {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .nav-btn.active {
+    background: var(--primary-gradient);
+    border-color: var(--primary-color);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+[data-theme="dark"] .nav-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+
+/* Dark mode summary cards */
+[data-theme="dark"] .summary-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+}
+
+[data-theme="dark"] .summary-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode forms */
+[data-theme="dark"] .form-group input,
+[data-theme="dark"] .form-group select {
+    background: var(--input-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .form-group input:focus,
+[data-theme="dark"] .form-group select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    background: var(--surface-color);
+}
+
+[data-theme="dark"] .form-group input::placeholder {
+    color: var(--text-secondary);
+}
+
+/* Dark mode transaction items */
+[data-theme="dark"] .transaction-item {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .transaction-item:hover {
+    background: var(--card-bg);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Dark mode buttons */
+[data-theme="dark"] .submit-btn:hover,
+[data-theme="dark"] .save-btn:hover {
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+[data-theme="dark"] .cancel-btn {
+    background: var(--surface-color);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .cancel-btn:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
 }
 
 /* Global Styles */
@@ -72,7 +177,72 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 1rem;
+}
+
+.logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 12px;
+    position: relative;
+    box-shadow: 0 4px 15px rgba(115, 103, 240, 0.3);
+    transition: all 0.3s ease;
+}
+
+.logo-icon:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(115, 103, 240, 0.4);
+}
+
+.logo-icon i {
+    color: white;
+    font-size: 1rem;
+    position: absolute;
+    transition: all 0.3s ease;
+}
+
+.logo-icon .fa-coins {
+    transform: translate(-4px, -2px);
+    z-index: 2;
+    animation: coinFloat 3s ease-in-out infinite;
+}
+
+.logo-icon .fa-chart-line {
+    transform: translate(4px, 2px);
+    z-index: 1;
+    opacity: 0.8;
+    font-size: 0.9rem;
+    animation: chartPulse 2s ease-in-out infinite;
+}
+
+@keyframes coinFloat {
+    0%, 100% { transform: translate(-4px, -2px); }
+    50% { transform: translate(-4px, -4px); }
+}
+
+@keyframes chartPulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+}
+
+.logo-text h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.logo-text small {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: block;
+    margin-top: 2px;
 }
 
 .logo i {
@@ -418,31 +588,137 @@ body {
     height: 400px;
 }
 
-/* Current Period Header */
+/* Current Period Header - Now positioned after header */
 .current-period-header {
     background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
     color: white;
-    padding: 1rem 1.5rem;
-    border-radius: 1rem;
-    margin-bottom: 1.5rem;
-    text-align: center;
+    padding: 1.5rem 2rem;
+    margin: 2rem auto 1rem auto;
+    max-width: 1200px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     box-shadow: var(--shadow);
+    border-radius: 1rem;
 }
 
-.current-period-header h3 {
-    margin: 0;
-    font-size: 1.2rem;
+/* Light mode specific styling */
+[data-theme="light"] .current-period-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+    border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+[data-theme="light"] .current-period-header .period-stats span {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Light mode navigation and buttons */
+[data-theme="light"] .nav-btn {
+    background: white;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .nav-btn.active {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.25);
+    border-color: transparent;
+}
+
+[data-theme="light"] .nav-btn:hover {
+    background: var(--hover-bg);
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Light mode summary cards */
+[data-theme="light"] .summary-card {
+    background: white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(102, 126, 234, 0.08);
+}
+
+[data-theme="light"] .summary-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* Light mode forms */
+[data-theme="light"] .form-group input,
+[data-theme="light"] .form-group select {
+    background: white;
+    border: 2px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .form-group input:focus,
+[data-theme="light"] .form-group select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1), 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Light mode transaction items */
+[data-theme="light"] .transaction-item {
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .transaction-item:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+.current-period-header .period-info {
+    text-align: left;
+}
+
+.current-period-header .period-info h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.4rem;
     font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.current-period-header .period-info .date-details {
+    margin: 0;
+    font-size: 1rem;
+    opacity: 0.9;
+    font-weight: 400;
+}
+
+.current-period-header .period-stats {
+    text-align: right;
+}
+
+.current-period-header .period-stats span {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
 }
 
 @media (max-width: 768px) {
     .current-period-header {
-        padding: 0.8rem 1rem;
+        padding: 1rem;
         margin-bottom: 1rem;
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
     }
     
-    .current-period-header h3 {
-        font-size: 1.1rem;
+    .current-period-header .period-info h3 {
+        font-size: 1.2rem;
+    }
+    
+    .current-period-header .period-info .date-details {
+        font-size: 0.9rem;
     }
 }
 
@@ -605,7 +881,71 @@ body {
     border-color: var(--error-color);
 }
 
-/* Loading Overlay */
+/* Toast Notifications with theme support */
+.toast {
+    background: var(--surface-color);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+}
+
+[data-theme="dark"] .toast {
+    background: var(--surface-color);
+    border-color: var(--border-color);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .toast {
+    background: white;
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.toast.success {
+    border-left: 4px solid var(--success-color);
+}
+
+.toast.error {
+    border-left: 4px solid var(--error-color);
+}
+
+.toast.info {
+    border-left: 4px solid var(--info-color);
+}
+
+.toast.warning {
+    border-left: 4px solid var(--warning-color);
+}
+
+/* Loading Overlay with theme support */
+.loading-overlay {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="dark"] .loading-overlay {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="light"] .loading-overlay {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.loading-spinner {
+    background: var(--surface-color);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+}
+
+[data-theme="dark"] .loading-spinner {
+    background: var(--surface-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="light"] .loading-spinner {
+    background: white;
+    border-color: rgba(0, 0, 0, 0.1);
+}
 .loading-overlay {
     position: fixed;
     top: 0;
@@ -732,6 +1072,23 @@ body {
 @media (max-width: 768px) {
     .header-content {
         padding: 1rem;
+    }
+
+    .logo-icon {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .logo-icon i {
+        font-size: 0.9rem;
+    }
+    
+    .logo-text h1 {
+        font-size: 1.3rem;
+    }
+    
+    .logo-text small {
+        font-size: 0.75rem;
     }
 
     .logo h1 {
@@ -884,6 +1241,44 @@ body {
     to {
         transform: translateX(0);
     }
+}
+
+/* Footer Styles with theme support */
+.footer {
+    background: var(--surface-color);
+    color: var(--text-primary);
+    border-top: 1px solid var(--border-color);
+    margin-top: auto;
+}
+
+[data-theme="dark"] .footer {
+    background: var(--surface-color);
+    border-top-color: var(--border-color);
+}
+
+[data-theme="light"] .footer {
+    background: white;
+    border-top: 1px solid rgba(102, 126, 234, 0.1);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.footer-content h3,
+.footer-content h4 {
+    color: var(--text-primary);
+}
+
+.footer-content p,
+.footer-content li {
+    color: var(--text-secondary);
+}
+
+.footer-content a {
+    color: var(--primary-color);
+    transition: color 0.3s ease;
+}
+
+.footer-content a:hover {
+    color: var(--accent-color);
 }
 
 /* Footer Styles */

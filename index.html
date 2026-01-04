@@ -7,7 +7,13 @@
     <meta name="keywords" content="expense tracker, budget, finance, money management">
     <meta name="author" content="Expense Tracker App">
     <title>Expense Tracker - Daily, Monthly, Yearly</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%234f46e5'/><text x='50' y='65' font-size='45' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>₹</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%234f46e5'/><text x='50' y='65' font-size='45' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>₹</text></svg>">
+    
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./auth-styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -19,16 +25,22 @@
         <header class="header">
             <div class="header-content">
                 <div class="logo">
-                    <i class="fas fa-wallet"></i>
-                    <h1>ExpenseTracker</h1>
+                    <div class="logo-icon">
+                        <i class="fas fa-coins"></i>
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>ExpenseTracker</h1>
+                        <small>Smart Money Management</small>
+                    </div>
                 </div>
                 <div class="header-controls">
                     <button class="theme-toggle" id="themeToggle">
                         <i class="fas fa-moon"></i>
                     </button>
                     <div class="user-section">
-                        <button id="authButton" class="sign-in-btn">
-                            <i class="fas fa-user"></i>
+                        <button id="authButton" class="sign-in-btn" onclick="openAuthModal()">
+                            <i class="fas fa-database"></i>
                             Sign In for Database
                         </button>
                         <div id="userInfo" class="user-info" style="display: none;">
@@ -45,6 +57,17 @@
                 </div>
             </div>
         </header>
+
+        <!-- Date Header -->
+        <div class="current-period-header">
+            <div class="period-info">
+                <h3 id="currentPeriodDisplay">Today's Expenses</h3>
+                <p id="currentDateDetails" class="date-details">Sunday, January 4, 2026</p>
+            </div>
+            <div class="period-stats">
+                <span id="transactionCount">0 transactions</span>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -175,11 +198,6 @@
                 </div>
             </div>
 
-            <!-- Date Header -->
-            <div class="current-period-header">
-                <h3 id="currentPeriodDisplay">Today's Expenses - January 4, 2026</h3>
-            </div>
-
             <!-- Transactions List -->
             <div class="transactions-section">
                 <div class="transactions-header">
@@ -200,6 +218,63 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Authentication Modal -->
+    <div id="authModal" class="modal" style="display: none;">
+        <div class="auth-modal">
+            <div class="auth-header">
+                <h2 id="authModalTitle">Sign In to Database</h2>
+                <button class="close-modal" onclick="closeAuthModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchAuthTab('signin')">Sign In</button>
+                <button class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
+            </div>
+            
+            <!-- Sign In Form -->
+            <form id="signInForm" class="auth-form">
+                <div class="form-group">
+                    <label for="signInEmail">Email</label>
+                    <input type="email" id="signInEmail" required placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label for="signInPassword">Password</label>
+                    <input type="password" id="signInPassword" required placeholder="Enter your password">
+                </div>
+                <button type="submit" class="auth-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Sign In
+                </button>
+            </form>
+            
+            <!-- Sign Up Form -->
+            <form id="signUpForm" class="auth-form" style="display: none;">
+                <div class="form-group">
+                    <label for="signUpName">Full Name</label>
+                    <input type="text" id="signUpName" required placeholder="Enter your full name">
+                </div>
+                <div class="form-group">
+                    <label for="signUpEmail">Email</label>
+                    <input type="email" id="signUpEmail" required placeholder="Enter your email">
+                </div>
+                <div class="form-group">
+                    <label for="signUpPassword">Password</label>
+                    <input type="password" id="signUpPassword" required placeholder="Create a password">
+                </div>
+                <div class="form-group">
+                    <label for="signUpPasswordConfirm">Confirm Password</label>
+                    <input type="password" id="signUpPasswordConfirm" required placeholder="Confirm your password">
+                </div>
+                <button type="submit" class="auth-btn">
+                    <i class="fas fa-user-plus"></i>
+                    Create Account
+                </button>
+            </form>
+        </div>
     </div>
 
     <!-- Footer -->
@@ -234,7 +309,7 @@
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="loading-spinner">
             <i class="fas fa-spinner fa-spin"></i>
-            <p>Syncing with Google Drive...</p>
+            <p>Checking your session...</p>
         </div>
     </div>
 

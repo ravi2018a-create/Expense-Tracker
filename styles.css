@@ -418,6 +418,34 @@ body {
     height: 400px;
 }
 
+/* Current Period Header */
+.current-period-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.current-period-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .current-period-header {
+        padding: 0.8rem 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .current-period-header h3 {
+        font-size: 1.1rem;
+    }
+}
+
 /* Transactions List */
 .transactions-section {
     background: var(--surface-color);

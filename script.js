@@ -688,6 +688,35 @@ function updateUI() {
     updateSummary();
     renderTransactions();
     updateChart();
+    updateCurrentPeriodDisplay();
+}
+
+function updateCurrentPeriodDisplay() {
+    const displayElement = document.getElementById('currentPeriodDisplay');
+    if (!displayElement) return;
+    
+    const now = new Date();
+    const monthFilter = document.getElementById('monthFilter').value;
+    const yearFilter = document.getElementById('yearFilter').value;
+    
+    if (currentView === 'daily') {
+        if (monthFilter) {
+            const filterDate = new Date(monthFilter + '-01');
+            displayElement.textContent = `Daily Expenses - ${filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+        } else {
+            displayElement.textContent = `Today's Expenses - ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
+        }
+    } else if (currentView === 'monthly') {
+        if (monthFilter) {
+            const filterDate = new Date(monthFilter + '-01');
+            displayElement.textContent = `Monthly Expenses - ${filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}`;
+        } else {
+            displayElement.textContent = `Monthly Expenses - ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}`;
+        }
+    } else if (currentView === 'yearly') {
+        const year = yearFilter || now.getFullYear().toString();
+        displayElement.textContent = `Yearly Expenses - ${year}`;
+    }
 }
 
 function updateSummary() {

@@ -724,6 +724,41 @@ body {
     font-weight: 400;
 }
 
+.current-period-header .period-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.current-period-header .period-input {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+}
+
+.current-period-header .period-input:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.current-period-header .period-input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Style date picker icon */
+.current-period-header .period-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+}
+
 .current-period-header .period-stats {
     text-align: right;
 }
@@ -752,6 +787,10 @@ body {
     
     .current-period-header .period-info .date-details {
         font-size: 0.9rem;
+    }
+    
+    .current-period-header .period-selector {
+        justify-content: center;
     }
 }
 

@@ -1107,6 +1107,34 @@ function setupEventListeners() {
         });
     }
     
+    // Period selectors (in header)
+    const dateSelector = document.getElementById('dateSelector');
+    if (dateSelector) {
+        dateSelector.addEventListener('change', () => {
+            console.log('📅 Date selector changed:', dateSelector.value);
+            updateUI();
+            updateChart();
+        });
+    }
+    
+    const monthSelector = document.getElementById('monthSelector');
+    if (monthSelector) {
+        monthSelector.addEventListener('change', () => {
+            console.log('🗓️ Month selector changed:', monthSelector.value);
+            updateUI();
+            updateChart();
+        });
+    }
+    
+    const yearSelector = document.getElementById('yearSelector');
+    if (yearSelector) {
+        yearSelector.addEventListener('change', () => {
+            console.log('📆 Year selector changed:', yearSelector.value);
+            updateUI();
+            updateChart();
+        });
+    }
+    
     // Filters
     const monthFilter = document.getElementById('monthFilter');
     if (monthFilter) {
@@ -1309,7 +1337,13 @@ function updateThemeIcon(theme) {
 
 // Set current date and update period display
 function setCurrentDate() {
-    const today = new Date().toISOString().split('T')[0];
+    // Use local date to avoid timezone issues
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`;
+    
     console.log('📅 Setting current date to:', today);
     
     const dateField = document.getElementById('date');
@@ -1320,16 +1354,34 @@ function setCurrentDate() {
         console.error('❌ Date field not found');
     }
     
-    const currentMonth = new Date().toISOString().slice(0, 7);
+    const currentMonth = `${year}-${month}`;
     if (document.getElementById('monthFilter')) {
         document.getElementById('monthFilter').value = currentMonth;
         console.log('📅 Month filter set to:', currentMonth);
     }
     
-    const currentYear = new Date().getFullYear();
     if (document.getElementById('yearFilter')) {
-        document.getElementById('yearFilter').value = currentYear;
-        console.log('📅 Year filter set to:', currentYear);
+        document.getElementById('yearFilter').value = year;
+        console.log('📅 Year filter set to:', year);
+    }
+    
+    // Set period selectors (in header)
+    const dateSelector = document.getElementById('dateSelector');
+    if (dateSelector) {
+        dateSelector.value = today;
+        console.log('📅 Date selector set to:', today);
+    }
+    
+    const monthSelector = document.getElementById('monthSelector');
+    if (monthSelector) {
+        monthSelector.value = currentMonth;
+        console.log('🗓️ Month selector set to:', currentMonth);
+    }
+    
+    const yearSelector = document.getElementById('yearSelector');
+    if (yearSelector) {
+        yearSelector.value = year;
+        console.log('📆 Year selector set to:', year);
     }
     
     // Update period display
@@ -1799,6 +1851,15 @@ function switchView(view) {
         }
     });
     
+    // Show/hide appropriate date selector based on view
+    const dateSelector = document.getElementById('dateSelector');
+    const monthSelector = document.getElementById('monthSelector');
+    const yearSelector = document.getElementById('yearSelector');
+    
+    if (dateSelector) dateSelector.style.display = view === 'daily' ? 'block' : 'none';
+    if (monthSelector) monthSelector.style.display = view === 'monthly' ? 'block' : 'none';
+    if (yearSelector) yearSelector.style.display = view === 'yearly' ? 'block' : 'none';
+    
     updateUI();
     updateChart();
 }
@@ -1914,31 +1975,38 @@ function updateCurrentPeriodDisplay() {
     if (!displayElement) return;
     
     const now = new Date();
-    const monthFilter = document.getElementById('monthFilter')?.value;
-    const yearFilter = document.getElementById('yearFilter')?.value;
+    const dateSelector = document.getElementById('dateSelector')?.value;
+    const monthSelector = document.getElementById('monthSelector')?.value;
+    const yearSelector = document.getElementById('yearSelector')?.value;
     
     if (currentView === 'daily') {
-        if (monthFilter) {
-            const filterDate = new Date(monthFilter + '-01');
-            displayElement.textContent = `Daily View`;
-            if (dateDetails) dateDetails.textContent = filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        // Show selected date or today
+        if (dateSelector) {
+            const selectedDate = new Date(dateSelector + 'T00:00:00');
+            const isToday = dateSelector === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            displayElement.textContent = isToday ? `Today's Summary` : `Daily Summary`;
+            if (dateDetails) dateDetails.textContent = selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         } else {
             displayElement.textContent = `Today's Summary`;
             if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         }
     } else if (currentView === 'monthly') {
-        if (monthFilter) {
-            const filterDate = new Date(monthFilter + '-01');
-            displayElement.textContent = `Monthly Summary`;
-            if (dateDetails) dateDetails.textContent = filterDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        // Show selected month or current month
+        if (monthSelector) {
+            const selectedMonth = new Date(monthSelector + '-01');
+            const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const isCurrentMonth = monthSelector === currentMonthStr;
+            displayElement.textContent = isCurrentMonth ? `This Month's Summary` : `Monthly Summary`;
+            if (dateDetails) dateDetails.textContent = selectedMonth.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
         } else {
             displayElement.textContent = `This Month's Summary`;
             if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
         }
     } else if (currentView === 'yearly') {
-        const year = yearFilter || now.getFullYear().toString();
-        displayElement.textContent = `Yearly Summary`;
-        if (dateDetails) dateDetails.textContent = `Year ${year}`;
+        const selectedYear = yearSelector || now.getFullYear().toString();
+        const isCurrentYear = selectedYear === now.getFullYear().toString();
+        displayElement.textContent = isCurrentYear ? `This Year's Summary` : `Yearly Summary`;
+        if (dateDetails) dateDetails.textContent = `Year ${selectedYear}`;
     }
     
     // Update transaction count
@@ -2060,35 +2128,42 @@ function getFilteredTransactions() {
     let filtered = [...transactions];
     console.log('🔍 Starting with', filtered.length, 'total transactions');
     
-    // Apply date filters based on current view
-    const now = new Date();
-    const today = new Date().toISOString().split('T')[0];
-    const monthFilter = document.getElementById('monthFilter')?.value;
-    const yearFilter = document.getElementById('yearFilter')?.value;
+    // Get selected values from period selectors
+    const dateSelector = document.getElementById('dateSelector')?.value;
+    const monthSelector = document.getElementById('monthSelector')?.value;
+    const yearSelector = document.getElementById('yearSelector')?.value;
     const categoryFilter = document.getElementById('categoryFilter')?.value;
     
+    // Use local date as fallback
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayDefault = `${year}-${month}-${day}`;
+    const monthDefault = `${year}-${month}`;
+    
     console.log('📅 Current view:', currentView);
-    console.log('📅 Today date:', today);
-    console.log('📅 Filters:', { monthFilter, yearFilter, categoryFilter });
+    console.log('📅 Selectors:', { dateSelector, monthSelector, yearSelector });
     
     if (currentView === 'daily') {
-        // Show today's transactions by default, or filtered date
+        // Use selected date or today
+        const selectedDate = dateSelector || todayDefault;
+        console.log('📅 Filtering for date:', selectedDate);
         filtered = filtered.filter(t => {
             const transactionDate = t.date || '';
             if (!transactionDate) return false;
-            if (monthFilter) {
-                return transactionDate.startsWith(monthFilter);
-            }
-            return transactionDate === today;
+            return transactionDate === selectedDate;
         });
     } else if (currentView === 'monthly') {
-        // Show current month by default, or filtered month
-        const currentMonth = monthFilter || now.toISOString().slice(0, 7);
-        filtered = filtered.filter(t => t.date && t.date.startsWith(currentMonth));
+        // Use selected month or current month
+        const selectedMonth = monthSelector || monthDefault;
+        console.log('🗓️ Filtering for month:', selectedMonth);
+        filtered = filtered.filter(t => t.date && t.date.startsWith(selectedMonth));
     } else if (currentView === 'yearly') {
-        // Show current year by default, or filtered year
-        const currentYear = yearFilter || now.getFullYear().toString();
-        filtered = filtered.filter(t => t.date && t.date.startsWith(currentYear));
+        // Use selected year or current year
+        const selectedYear = yearSelector || year.toString();
+        console.log('📆 Filtering for year:', selectedYear);
+        filtered = filtered.filter(t => t.date && t.date.startsWith(selectedYear));
     }
     
     // Apply category filter

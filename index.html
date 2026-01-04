@@ -29,15 +29,19 @@
                         <i class="fas fa-moon"></i>
                     </button>
                     <div class="user-section">
-                        <div id="signInButton" class="sign-in-btn">
+                        <button id="authButton" class="sign-in-btn">
+                            <i class="fas fa-user"></i>
+                            Sign In for Database
+                        </button>
+                        <div id="signInButton" class="sign-in-btn" style="display: none;">
                             <i class="fab fa-google"></i>
                             Sign in with Google
                         </div>
                         <div id="userInfo" class="user-info" style="display: none;">
-                            <img id="userPhoto" class="user-photo" src="" alt="User">
-                            <span id="userName"></span>
+                            <span id="userEmail"></span>
                             <button id="signOutButton" class="sign-out-btn">
                                 <i class="fas fa-sign-out-alt"></i>
+                                Sign Out
                             </button>
                         </div>
                         <div id="connectionStatus" class="connection-status">

@@ -20,31 +20,69 @@ let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Supabase for future backend features
+document.addEventListener('DOMContentLoaded', async function() {
+    // Initialize Supabase for backend features
     if (typeof window.supabase !== 'undefined') {
         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('Supabase ready for backend features');
+        
+        // Check if user is already signed in
+        await checkSupabaseAuth();
+    } else {
+        console.log('Supabase not available - using localStorage only');
+        updateConnectionStatus('local');
     }
     
     initializeApp();
     setupEventListeners();
-    checkOrCreateUser(); // Check for existing user or create new one
-    loadTransactions();
+    
+    // Load transactions (from database if authenticated, localStorage if not)
+    await loadTransactions();
     updateUI();
     setCurrentDate();
     
     // Show welcome message
     setTimeout(() => {
-        const userName = localStorage.getItem('userName') || 'User';
-        showToast(`Welcome ${userName}! Your expenses are private and saved securely.`, 'success');
+        if (currentUser) {
+            showToast(`Welcome back! Data synced to database.`, 'success');
+        } else {
+            showToast(`Welcome! Sign in to save data to database.`, 'info');
+        }
     }, 2000);
-    
-    // Try to initialize Google APIs after a short delay
-    setTimeout(() => {
-        initializeGoogleAPIs();
-    }, 1000);
 });
+
+// Check Supabase authentication
+async function checkSupabaseAuth() {
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        
+        if (session) {
+            currentUser = session.user;
+            updateConnectionStatus('database');
+            console.log('User authenticated with Supabase:', currentUser.email);
+        } else {
+            updateConnectionStatus('local');
+            console.log('No authenticated user - using localStorage');
+        }
+    } catch (error) {
+        console.error('Auth check error:', error);
+        updateConnectionStatus('local');
+    }
+}
+
+// Update connection status display
+function updateConnectionStatus(mode) {
+    const connectionStatus = document.getElementById('connectionStatus');
+    if (connectionStatus) {
+        if (mode === 'database') {
+            connectionStatus.innerHTML = '<small><i class="fas fa-database"></i> Database Connected</small>';
+            connectionStatus.style.color = 'var(--success-color)';
+        } else {
+            connectionStatus.innerHTML = '<small><i class="fas fa-hdd"></i> Local Storage</small>';
+            connectionStatus.style.color = 'var(--text-secondary)';
+        }
+    }
+}
 
 // User management for multiple users
 function checkOrCreateUser() {

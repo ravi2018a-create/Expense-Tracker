@@ -58,19 +58,30 @@
             </div>
         </header>
 
-        <!-- Date Header -->
+        <!-- Date Header - Clean Professional Design -->
         <div class="current-period-header">
-            <div class="period-info">
-                <h3 id="currentPeriodDisplay">Today's Expenses</h3>
-                <p id="currentDateDetails" class="date-details">Sunday, January 4, 2026</p>
+            <div class="period-nav-container">
+                <button class="period-nav-btn" id="prevPeriod" title="Previous">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="period-center">
+                    <h3 id="currentPeriodDisplay">Today's Summary</h3>
+                    <p id="currentDateDetails" class="date-details">Sunday, January 5, 2026</p>
+                    <div class="period-inputs">
+                        <input type="date" id="dateSelector" class="period-input-hidden">
+                        <input type="month" id="monthSelector" class="period-input-hidden">
+                        <input type="number" id="yearSelector" class="period-input-hidden" min="2020" max="2030">
+                    </div>
+                </div>
+                <button class="period-nav-btn" id="nextPeriod" title="Next">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
             </div>
-            <div class="period-selector">
-                <input type="date" id="dateSelector" class="period-input" title="Select Date">
-                <input type="month" id="monthSelector" class="period-input" style="display: none;" title="Select Month">
-                <input type="number" id="yearSelector" class="period-input" style="display: none;" min="2020" max="2030" placeholder="Year" title="Select Year">
-            </div>
-            <div class="period-stats">
-                <span id="transactionCount">0 transactions</span>
+            <div class="period-footer">
+                <span id="transactionCount" class="transaction-badge">0 transactions</span>
+                <button class="today-btn-small" id="goToToday" title="Go to Today">
+                    <i class="fas fa-redo"></i> Today
+                </button>
             </div>
         </div>
 

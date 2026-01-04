@@ -1135,6 +1135,29 @@ function setupEventListeners() {
         });
     }
     
+    // Navigation arrows for period
+    const prevPeriod = document.getElementById('prevPeriod');
+    if (prevPeriod) {
+        prevPeriod.addEventListener('click', () => {
+            navigatePeriod(-1);
+        });
+    }
+    
+    const nextPeriod = document.getElementById('nextPeriod');
+    if (nextPeriod) {
+        nextPeriod.addEventListener('click', () => {
+            navigatePeriod(1);
+        });
+    }
+    
+    // Go to Today button
+    const goToToday = document.getElementById('goToToday');
+    if (goToToday) {
+        goToToday.addEventListener('click', () => {
+            goToCurrentPeriod();
+        });
+    }
+    
     // Filters
     const monthFilter = document.getElementById('monthFilter');
     if (monthFilter) {
@@ -1862,6 +1885,62 @@ function switchView(view) {
     
     updateUI();
     updateChart();
+}
+
+// Navigate to previous/next period
+function navigatePeriod(direction) {
+    const dateSelector = document.getElementById('dateSelector');
+    const monthSelector = document.getElementById('monthSelector');
+    const yearSelector = document.getElementById('yearSelector');
+    
+    if (currentView === 'daily' && dateSelector) {
+        // Navigate by day
+        const currentDate = new Date(dateSelector.value + 'T00:00:00');
+        currentDate.setDate(currentDate.getDate() + direction);
+        dateSelector.value = formatDateForInput(currentDate);
+        console.log('📅 Navigated to:', dateSelector.value);
+    } else if (currentView === 'monthly' && monthSelector) {
+        // Navigate by month
+        const [year, month] = monthSelector.value.split('-').map(Number);
+        const newDate = new Date(year, month - 1 + direction, 1);
+        monthSelector.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+        console.log('🗓️ Navigated to:', monthSelector.value);
+    } else if (currentView === 'yearly' && yearSelector) {
+        // Navigate by year
+        yearSelector.value = parseInt(yearSelector.value) + direction;
+        console.log('📆 Navigated to:', yearSelector.value);
+    }
+    
+    updateUI();
+    updateChart();
+}
+
+// Go to current period (today/this month/this year)
+function goToCurrentPeriod() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    
+    const dateSelector = document.getElementById('dateSelector');
+    const monthSelector = document.getElementById('monthSelector');
+    const yearSelector = document.getElementById('yearSelector');
+    
+    if (dateSelector) dateSelector.value = `${year}-${month}-${day}`;
+    if (monthSelector) monthSelector.value = `${year}-${month}`;
+    if (yearSelector) yearSelector.value = year;
+    
+    updateUI();
+    updateChart();
+    showToast('Jumped to current period!', 'success');
+}
+
+// Format date for input field
+function formatDateForInput(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // Data persistence with user separation

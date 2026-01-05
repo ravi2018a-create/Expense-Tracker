@@ -4444,7 +4444,7 @@ body {
     }
     
     .transactions-scroll-container {
-        max-height: 300px;
+        max-height: 400px; /* Increased height for mobile to show 3+ transactions */
         /* Hide scrollbar for mobile webkit browsers */
         -webkit-scrollbar-width: none;
         scrollbar-width: none; /* Firefox */
@@ -4453,6 +4453,37 @@ body {
     
     .transactions-scroll-container::-webkit-scrollbar {
         display: none; /* Hide scrollbar for mobile webkit browsers */
+    }
+    
+    /* Mobile transaction item styling */
+    .transaction-item {
+        padding: 1rem; /* Reduced from 1.5rem */
+        margin: 0 0 0.75rem 0; /* Reduced margin */
+        border-radius: 16px;
+    }
+    
+    .transaction-info h4 {
+        font-size: 0.95rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .transaction-info p {
+        font-size: 0.85rem;
+    }
+    
+    .transaction-amount {
+        font-size: 1.1rem;
+    }
+    
+    .category-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    /* Chart mobile improvements */
+    .chart-container-3d {
+        height: 280px;
     }
 }
 
@@ -4468,7 +4499,7 @@ body {
     }
     
     .transactions-scroll-container {
-        max-height: 250px;
+        max-height: 350px; /* Increased for small mobile to show 3+ transactions */
         /* Hide scrollbar for small mobile webkit browsers */
         -webkit-scrollbar-width: none;
         scrollbar-width: none; /* Firefox */
@@ -4477,6 +4508,45 @@ body {
     
     .transactions-scroll-container::-webkit-scrollbar {
         display: none; /* Hide scrollbar for small mobile webkit browsers */
+    }
+    
+    /* Small mobile transaction item styling */
+    .transaction-item {
+        padding: 0.75rem; /* Further reduced padding */
+        margin: 0 0 0.5rem 0; /* Reduced margin */
+        border-radius: 14px;
+    }
+    
+    .transaction-info h4 {
+        font-size: 0.9rem;
+        margin-bottom: 0.2rem;
+    }
+    
+    .transaction-info p {
+        font-size: 0.8rem;
+    }
+    
+    .transaction-amount {
+        font-size: 1rem;
+    }
+    
+    .category-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 0.9rem;
+    }
+    
+    /* Chart small mobile improvements */
+    .chart-container-3d {
+        height: 220px;
+    }
+    
+    .chart-header h3 {
+        font-size: 1rem;
+    }
+    
+    .chart-legend {
+        gap: 0.5rem;
     }
     /* Mobile transactions header and export button */
     .transactions-header {

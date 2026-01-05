@@ -201,6 +201,28 @@
                 </form>
             </div>
 
+            <!-- Transactions List -->
+            <div class="transactions-section">
+                <div class="transactions-header">
+                    <h2>Recent Transactions</h2>
+                    <div class="sync-status">
+                        <span id="syncStatus" class="sync-indicator">
+                            <i class="fas fa-sync-alt"></i>
+                            Synced
+                        </span>
+                    </div>
+                </div>
+                <div class="transactions-scroll-container">
+                    <div class="transactions-list" id="transactionsList">
+                        <div class="empty-state">
+                            <i class="fas fa-receipt"></i>
+                            <h3>No transactions yet</h3>
+                            <p>Add your first transaction to get started</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Chart Section - Income vs Expense Comparison -->
             <div class="chart-section">
                 <div class="chart-header">
@@ -225,28 +247,6 @@
                     <div class="chart-insights-single-line" id="chartInsightsOverlay">
                         <i class="fas fa-lightbulb insight-icon"></i>
                         <span class="insight-text">Add transactions to see smart insights</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Transactions List -->
-            <div class="transactions-section">
-                <div class="transactions-header">
-                    <h2>Recent Transactions</h2>
-                    <div class="sync-status">
-                        <span id="syncStatus" class="sync-indicator">
-                            <i class="fas fa-sync-alt"></i>
-                            Synced
-                        </span>
-                    </div>
-                </div>
-                <div class="transactions-scroll-container">
-                    <div class="transactions-list" id="transactionsList">
-                        <div class="empty-state">
-                            <i class="fas fa-receipt"></i>
-                            <h3>No transactions yet</h3>
-                            <p>Add your first transaction to get started</p>
-                        </div>
                     </div>
                 </div>
             </div>

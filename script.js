@@ -59,10 +59,17 @@ async function handleAuthCallback() {
 let currentUser = null;
 let transactions = [];
 let currentView = 'daily';
-let expenseChart = null;
-let incomeChart = null;
 let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
+let comparisonChart = null; // Chart instance
+let customStartDate = null; // Custom range start
+let customEndDate = null; // Custom range end
+
+// Chart filtering state
+let chartDataVisibility = {
+    income: true,
+    expense: true
+};
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', async function() {
@@ -93,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     updateUIForAuth();
                     updateConnectionStatus('database');
                     hideLoadingOverlay();
-                    showToast(`Welcome back, ${authData.email.split('@')[0]}!`, 'success');
+                    showToast(`Welcome back, ${authData.user.user_metadata?.full_name || authData.user.user_metadata?.name || authData.email?.split('@')[0] || 'User'}!`, 'success');
                     
                     // Don't load transactions yet - wait for Supabase to initialize
                     console.log('⏳ Waiting for Supabase session to sync...');
@@ -214,7 +221,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 updateUI();
                 
                 if (!wasAlreadyAuthenticated) {
-                    showToast(`Welcome back, ${session.user.email}!`, 'success');
+                    showToast(`Welcome back, ${session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'}!`, 'success');
                 } else {
                     console.log('✅ Supabase session synced with localStorage session');
                 }
@@ -291,6 +298,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     initializeApp();
     setupEventListeners();
+    initializeChartLegendToggles();
     setupAuthModalListeners(); // Add authentication form listeners
     
     // Load transactions (from database if authenticated, localStorage if not)
@@ -348,7 +356,7 @@ async function checkSupabaseAuth() {
                 updateUI(); // Still update UI even if data loading fails
             });
             
-            showToast(`Welcome back, ${currentUser.email.split('@')[0]}!`, 'success');
+            showToast(`Welcome back, ${currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || currentUser.email?.split('@')[0] || 'User'}!`, 'success');
         } else {
             console.log('ℹ️ No existing session found');
             updateConnectionStatus('local');
@@ -671,7 +679,14 @@ function updateUIForAuth() {
         // User is signed in
         if (authButton) authButton.style.display = 'none';
         if (userInfo) userInfo.style.display = 'flex';
-        if (userEmail) userEmail.textContent = currentUser.email;
+        if (userEmail) {
+            // Display user's name if available, otherwise use email prefix
+            const userName = currentUser.user_metadata?.full_name || 
+                           currentUser.user_metadata?.name || 
+                           currentUser.email?.split('@')[0] || 
+                           'User';
+            userEmail.textContent = userName;
+        }
         updateConnectionStatus('database');
         
         // Load user's theme preference from backend
@@ -915,48 +930,89 @@ function signOut() {
     }
 }
 
-// Update category options based on type (expense/income)
-function updateCategoryOptions(typeSelectId, categorySelectId, customGroupId) {
-    const typeSelect = document.getElementById(typeSelectId);
-    const categorySelect = document.getElementById(categorySelectId);
-    const customGroup = document.getElementById(customGroupId);
-    
-    if (!typeSelect || !categorySelect) return;
-    
-    const type = typeSelect.value;
-    const currentValue = categorySelect.value;
-    
-    // Clear current options
-    categorySelect.innerHTML = '';
-    
-    if (type === 'income') {
-        // Income categories: Salary and Other
-        categorySelect.innerHTML = `
-            <option value="">Select category</option>
-            <option value="salary">💰 Salary</option>
-            <option value="other_income">📋 Other</option>
-        `;
-        // Show custom input if "Other" was selected
-        if (currentValue === 'other_income' && customGroup) {
-            customGroup.style.display = 'block';
-        }
-    } else {
-        // Expense categories
-        categorySelect.innerHTML = `
-            <option value="">Select category</option>
-            <option value="food">🍕 Food</option>
-            <option value="transport">🚗 Transport</option>
-            <option value="shopping">🛒 Shopping</option>
-            <option value="entertainment">🎬 Entertainment</option>
-            <option value="bills">💡 Bills</option>
-            <option value="health">🏥 Health</option>
-            <option value="other">📋 Other</option>
-        `;
-        // Hide custom income source for expenses
-        if (customGroup) {
-            customGroup.style.display = 'none';
-        }
+// Setup custom date range listeners
+function setupCustomRangeListeners() {
+    // Apply custom range button
+    const applyRangeBtn = document.getElementById('applyRangeBtn');
+    if (applyRangeBtn) {
+        applyRangeBtn.addEventListener('click', () => {
+            applyCustomRange();
+        });
     }
+    
+    // Quick range buttons
+    const quickRangeBtns = document.querySelectorAll('.quick-range-btn');
+    quickRangeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const days = parseInt(btn.dataset.range);
+            applyQuickRange(days);
+            
+            // Update active state
+            quickRangeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+    
+    // Set default dates for custom range
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    if (startDateInput && endDateInput) {
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        endDateInput.value = formatDateForInput(today);
+        startDateInput.value = formatDateForInput(thirtyDaysAgo);
+    }
+}
+
+// Apply custom date range
+function applyCustomRange() {
+    const startDate = document.getElementById('startDate')?.value;
+    const endDate = document.getElementById('endDate')?.value;
+    
+    if (!startDate || !endDate) {
+        showToast('Please select both start and end dates', 'error');
+        return;
+    }
+    
+    if (startDate > endDate) {
+        showToast('Start date must be before end date', 'error');
+        return;
+    }
+    
+    customStartDate = startDate;
+    customEndDate = endDate;
+    
+    console.log('📅 Custom range applied:', customStartDate, 'to', customEndDate);
+    
+    // Update the period header display
+    updatePeriodDisplay();
+    updateUI();
+    showToast('Custom range applied', 'success');
+}
+
+// Apply quick range preset
+function applyQuickRange(days) {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - days);
+    
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (startDateInput && endDateInput) {
+        startDateInput.value = formatDateForInput(startDate);
+        endDateInput.value = formatDateForInput(today);
+    }
+    
+    customStartDate = formatDateForInput(startDate);
+    customEndDate = formatDateForInput(today);
+    
+    console.log('📅 Quick range applied:', customStartDate, 'to', customEndDate);
+    
+    updatePeriodDisplay();
+    updateUI();
 }
 
 // Setup event listeners
@@ -1033,29 +1089,6 @@ function setupEventListeners() {
         console.warn('❌ Transaction form not found');
     }
     
-    // Type selector change - switch categories based on income/expense
-    const typeSelect = document.getElementById('type');
-    if (typeSelect) {
-        typeSelect.addEventListener('change', () => {
-            updateCategoryOptions('type', 'category', 'customIncomeSourceGroup');
-        });
-        console.log('✅ Type selector listener added');
-    }
-    
-    // Category selector change - show/hide custom income source
-    const categorySelect = document.getElementById('category');
-    if (categorySelect) {
-        categorySelect.addEventListener('change', () => {
-            const customGroup = document.getElementById('customIncomeSourceGroup');
-            const type = document.getElementById('type').value;
-            if (type === 'income' && categorySelect.value === 'other_income') {
-                customGroup.style.display = 'block';
-            } else {
-                customGroup.style.display = 'none';
-            }
-        });
-    }
-    
     // Edit form
     const editForm = document.getElementById('editTransactionForm');
     if (editForm) {
@@ -1066,28 +1099,6 @@ function setupEventListeners() {
         console.log('✅ Edit form listener added');
     } else {
         console.log('ℹ️ Edit form not found (normal on page load)');
-    }
-    
-    // Edit type selector change
-    const editTypeSelect = document.getElementById('editType');
-    if (editTypeSelect) {
-        editTypeSelect.addEventListener('change', () => {
-            updateCategoryOptions('editType', 'editCategory', 'editCustomIncomeSourceGroup');
-        });
-    }
-    
-    // Edit category selector change
-    const editCategorySelect = document.getElementById('editCategory');
-    if (editCategorySelect) {
-        editCategorySelect.addEventListener('change', () => {
-            const customGroup = document.getElementById('editCustomIncomeSourceGroup');
-            const type = document.getElementById('editType').value;
-            if (type === 'income' && editCategorySelect.value === 'other_income') {
-                customGroup.style.display = 'block';
-            } else {
-                customGroup.style.display = 'none';
-            }
-        });
     }
     
     // Modal controls
@@ -1113,7 +1124,6 @@ function setupEventListeners() {
         dateSelector.addEventListener('change', () => {
             console.log('📅 Date selector changed:', dateSelector.value);
             updateUI();
-            updateChart();
         });
     }
     
@@ -1122,7 +1132,6 @@ function setupEventListeners() {
         monthSelector.addEventListener('change', () => {
             console.log('🗓️ Month selector changed:', monthSelector.value);
             updateUI();
-            updateChart();
         });
     }
     
@@ -1131,7 +1140,6 @@ function setupEventListeners() {
         yearSelector.addEventListener('change', () => {
             console.log('📆 Year selector changed:', yearSelector.value);
             updateUI();
-            updateChart();
         });
     }
     
@@ -1158,41 +1166,8 @@ function setupEventListeners() {
         });
     }
     
-    // Filters
-    const monthFilter = document.getElementById('monthFilter');
-    if (monthFilter) {
-        monthFilter.addEventListener('change', () => {
-            console.log('🗓️ Month filter changed');
-            applyFilters();
-        });
-    }
-    
-    const yearFilter = document.getElementById('yearFilter');
-    if (yearFilter) {
-        yearFilter.addEventListener('change', () => {
-            console.log('📅 Year filter changed');
-            applyFilters();
-        });
-    }
-    
-    const categoryFilter = document.getElementById('categoryFilter');
-    if (categoryFilter) {
-        categoryFilter.addEventListener('change', () => {
-            console.log('🏷️ Category filter changed');
-            applyFilters();
-        });
-    }
-    
-    const clearFiltersBtn = document.getElementById('clearFilters');
-    if (clearFiltersBtn) {
-        clearFiltersBtn.addEventListener('click', () => {
-            console.log('🧹 Clear filters clicked');
-            clearFilters();
-        });
-        console.log('✅ Clear filters button listener added');
-    } else {
-        console.warn('❌ Clear filters button not found');
-    }
+    // Custom date range controls
+    setupCustomRangeListeners();
     
     // Close modal on outside click
     const editModal = document.getElementById('editModal');
@@ -1420,25 +1395,57 @@ function updatePeriodDisplay() {
     if (!periodDisplay || !dateDetails) return;
     
     if (currentView === 'daily') {
-        const today = now.toLocaleDateString('en-US', { 
+        const dateSelector = document.getElementById('dateSelector');
+        let displayDate = now;
+        if (dateSelector && dateSelector.value) {
+            displayDate = new Date(dateSelector.value + 'T00:00:00');
+        }
+        const dateStr = displayDate.toLocaleDateString('en-US', { 
             weekday: 'long',
             year: 'numeric', 
             month: 'long', 
             day: 'numeric' 
         });
-        periodDisplay.textContent = "Today's Expenses";
-        dateDetails.textContent = today;
+        periodDisplay.textContent = "Daily Summary";
+        dateDetails.textContent = dateStr;
     } else if (currentView === 'monthly') {
-        const currentMonth = now.toLocaleDateString('en-US', { 
+        const monthSelector = document.getElementById('monthSelector');
+        let displayDate = now;
+        if (monthSelector && monthSelector.value) {
+            const [year, month] = monthSelector.value.split('-');
+            displayDate = new Date(year, month - 1, 1);
+        }
+        const monthStr = displayDate.toLocaleDateString('en-US', { 
             year: 'numeric', 
             month: 'long'
         });
-        periodDisplay.textContent = "This Month's Expenses";
-        dateDetails.textContent = currentMonth;
+        periodDisplay.textContent = "Monthly Summary";
+        dateDetails.textContent = monthStr;
     } else if (currentView === 'yearly') {
-        const currentYear = now.getFullYear();
-        periodDisplay.textContent = "This Year's Expenses";
-        dateDetails.textContent = `Year ${currentYear}`;
+        const yearSelector = document.getElementById('yearSelector');
+        let displayYear = now.getFullYear();
+        if (yearSelector && yearSelector.value) {
+            displayYear = yearSelector.value;
+        }
+        periodDisplay.textContent = "Yearly Summary";
+        dateDetails.textContent = `Year ${displayYear}`;
+    } else if (currentView === 'custom') {
+        periodDisplay.textContent = "Custom Range";
+        if (customStartDate && customEndDate) {
+            const startStr = new Date(customStartDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            });
+            const endStr = new Date(customEndDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            });
+            dateDetails.textContent = `${startStr} - ${endStr}`;
+        } else {
+            dateDetails.textContent = 'Select a date range';
+        }
     }
     
     // Update transaction count
@@ -1464,17 +1471,11 @@ async function handleAddTransaction(e) {
     // Get form values directly from DOM elements
     const description = document.getElementById('description').value.trim();
     const amount = parseFloat(document.getElementById('amount').value);
-    let category = document.getElementById('category').value;
     const type = document.getElementById('type').value;
     const dateInput = document.getElementById('date').value;
     
-    // If income type and "Other" selected, use custom income source name
-    if (type === 'income' && category === 'other_income') {
-        const customSource = document.getElementById('customIncomeSource').value.trim();
-        if (customSource) {
-            category = customSource; // Use custom name as category
-        }
-    }
+    // Use type as category (expense or income)
+    const category = type;
     
     // Ensure date is in YYYY-MM-DD format
     let date = dateInput;
@@ -1671,25 +1672,8 @@ function editTransaction(id) {
     document.getElementById('editId').value = id;
     document.getElementById('editDescription').value = transaction.description;
     document.getElementById('editAmount').value = transaction.amount;
-    document.getElementById('editCategory').value = transaction.category;
     document.getElementById('editType').value = transaction.type;
     document.getElementById('editDate').value = transaction.date;
-    
-    // Update category options based on type
-    updateCategoryOptions('editType', 'editCategory', 'editCustomIncomeSourceGroup');
-    
-    // Set the category value after options are updated
-    setTimeout(() => {
-        const editCategory = document.getElementById('editCategory');
-        // Check if it's a custom income category
-        if (transaction.type === 'income' && !['salary', 'other_income'].includes(transaction.category)) {
-            editCategory.value = 'other_income';
-            document.getElementById('editCustomIncomeSource').value = transaction.category;
-            document.getElementById('editCustomIncomeSourceGroup').style.display = 'block';
-        } else {
-            editCategory.value = transaction.category;
-        }
-    }, 10);
     
     // Show modal
     document.getElementById('editModal').style.display = 'flex';
@@ -1702,16 +1686,9 @@ async function handleEditTransaction(e) {
     const id = document.getElementById('editId').value;
     const existingTransaction = transactions.find(t => t.id === id);
     
-    let category = document.getElementById('editCategory').value;
     const type = document.getElementById('editType').value;
-    
-    // If income type and "Other" selected, use custom income source name
-    if (type === 'income' && category === 'other_income') {
-        const customSource = document.getElementById('editCustomIncomeSource').value.trim();
-        if (customSource) {
-            category = customSource; // Use custom name as category
-        }
-    }
+    // Use type as category
+    const category = type;
     
     const updatedTransaction = {
         id: id,
@@ -1874,6 +1851,24 @@ function switchView(view) {
         }
     });
     
+    // Show/hide custom range section
+    const customRangeSection = document.getElementById('customRangeSection');
+    if (customRangeSection) {
+        customRangeSection.style.display = view === 'custom' ? 'block' : 'none';
+    }
+    
+    // Show/hide period header nav buttons for custom view
+    const periodHeader = document.querySelector('.current-period-header');
+    const prevBtn = document.getElementById('prevPeriod');
+    const nextBtn = document.getElementById('nextPeriod');
+    if (view === 'custom') {
+        if (prevBtn) prevBtn.style.display = 'none';
+        if (nextBtn) nextBtn.style.display = 'none';
+    } else {
+        if (prevBtn) prevBtn.style.display = 'flex';
+        if (nextBtn) nextBtn.style.display = 'flex';
+    }
+    
     // Show/hide appropriate date selector based on view
     const dateSelector = document.getElementById('dateSelector');
     const monthSelector = document.getElementById('monthSelector');
@@ -1884,7 +1879,6 @@ function switchView(view) {
     if (yearSelector) yearSelector.style.display = view === 'yearly' ? 'block' : 'none';
     
     updateUI();
-    updateChart();
 }
 
 // Navigate to previous/next period
@@ -1912,7 +1906,6 @@ function navigatePeriod(direction) {
     }
     
     updateUI();
-    updateChart();
 }
 
 // Go to current period (today/this month/this year)
@@ -1931,7 +1924,6 @@ function goToCurrentPeriod() {
     if (yearSelector) yearSelector.value = year;
     
     updateUI();
-    updateChart();
     showToast('Jumped to current period!', 'success');
 }
 
@@ -2044,8 +2036,8 @@ function updateUI() {
     console.log('🔄 Updating UI with', transactions.length, 'total transactions');
     updateSummary();
     renderTransactions();
-    updateChart();
     updateCurrentPeriodDisplay();
+    updateComparisonChart();
 }
 
 function updateCurrentPeriodDisplay() {
@@ -2120,6 +2112,8 @@ function updateSummary() {
         periodText = "Monthly";
     } else if (currentView === 'yearly') {
         periodText = "Yearly";
+    } else if (currentView === 'custom') {
+        periodText = "Range";
     }
     
     if (incomeLabel) incomeLabel.textContent = `${periodText} Income`;
@@ -2179,12 +2173,12 @@ function renderTransactions() {
     container.innerHTML = sortedTransactions.map(transaction => `
         <div class="transaction-item slide-up">
             <div class="transaction-details">
-                <div class="category-icon">
-                    ${getCategoryIcon(transaction.category)}
+                <div class="category-icon ${transaction.type}">
+                    ${transaction.type === 'income' ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>'}
                 </div>
                 <div class="transaction-info">
                     <h4>${transaction.description}</h4>
-                    <p>${formatDate(transaction.date)} • ${getCategoryName(transaction.category)}</p>
+                    <p>${formatDate(transaction.date)} • ${transaction.type === 'income' ? 'Income' : 'Expense'}</p>
                 </div>
             </div>
             <div class="transaction-amount ${transaction.type}">
@@ -2211,7 +2205,6 @@ function getFilteredTransactions() {
     const dateSelector = document.getElementById('dateSelector')?.value;
     const monthSelector = document.getElementById('monthSelector')?.value;
     const yearSelector = document.getElementById('yearSelector')?.value;
-    const categoryFilter = document.getElementById('categoryFilter')?.value;
     
     // Use local date as fallback
     const now = new Date();
@@ -2243,212 +2236,21 @@ function getFilteredTransactions() {
         const selectedYear = yearSelector || year.toString();
         console.log('📆 Filtering for year:', selectedYear);
         filtered = filtered.filter(t => t.date && t.date.startsWith(selectedYear));
-    }
-    
-    // Apply category filter
-    if (categoryFilter) {
-        filtered = filtered.filter(t => t.category === categoryFilter);
+    } else if (currentView === 'custom') {
+        // Use custom date range
+        if (customStartDate && customEndDate) {
+            console.log('📅 Filtering for custom range:', customStartDate, 'to', customEndDate);
+            filtered = filtered.filter(t => {
+                if (!t.date) return false;
+                return t.date >= customStartDate && t.date <= customEndDate;
+            });
+        } else {
+            console.log('⚠️ Custom range not set, showing all transactions');
+        }
     }
     
     console.log('✅ Final filtered transactions:', filtered.length);
     return filtered;
-}
-
-function applyFilters() {
-    updateUI();
-}
-
-function clearFilters() {
-    document.getElementById('monthFilter').value = '';
-    document.getElementById('yearFilter').value = '';
-    document.getElementById('categoryFilter').value = '';
-    applyFilters();
-}
-
-// Chart management
-function updateChart() {
-    updateExpenseChart();
-    updateIncomeChart();
-}
-
-function updateExpenseChart() {
-    const ctx = document.getElementById('expenseChart');
-    if (!ctx) return;
-    
-    // Destroy existing chart
-    if (expenseChart) {
-        expenseChart.destroy();
-    }
-    
-    const filteredTransactions = getFilteredTransactions();
-    const expenses = filteredTransactions.filter(t => t.type === 'expense');
-    
-    // Group by category
-    const categoryData = {};
-    expenses.forEach(transaction => {
-        const category = transaction.category;
-        categoryData[category] = (categoryData[category] || 0) + transaction.amount;
-    });
-    
-    const labels = Object.keys(categoryData).map(cat => getCategoryName(cat));
-    const data = Object.values(categoryData);
-    const expenseColors = [
-        '#FF6384', '#FF9F40', '#ef4444', '#f97316',
-        '#dc2626', '#fb923c', '#f87171', '#fca5a5'
-    ];
-    
-    // Show empty state if no expenses
-    if (data.length === 0) {
-        expenseChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['No expenses'],
-                datasets: [{
-                    data: [1],
-                    backgroundColor: ['#374151'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: false }
-                }
-            }
-        });
-        return;
-    }
-    
-    expenseChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: expenseColors,
-                borderWidth: 0,
-                hoverBorderWidth: 3,
-                hoverBorderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 15,
-                        usePointStyle: true,
-                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary')
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = formatCurrency(context.raw);
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.raw / total) * 100).toFixed(1);
-                            return `${label}: ${value} (${percentage}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function updateIncomeChart() {
-    const ctx = document.getElementById('incomeChart');
-    if (!ctx) return;
-    
-    // Destroy existing chart
-    if (incomeChart) {
-        incomeChart.destroy();
-    }
-    
-    const filteredTransactions = getFilteredTransactions();
-    const incomes = filteredTransactions.filter(t => t.type === 'income');
-    
-    // Group by category
-    const categoryData = {};
-    incomes.forEach(transaction => {
-        const category = transaction.category;
-        categoryData[category] = (categoryData[category] || 0) + transaction.amount;
-    });
-    
-    const labels = Object.keys(categoryData).map(cat => getCategoryName(cat));
-    const data = Object.values(categoryData);
-    const incomeColors = [
-        '#22c55e', '#36A2EB', '#10b981', '#14b8a6',
-        '#06b6d4', '#0ea5e9', '#34d399', '#6ee7b7'
-    ];
-    
-    // Show empty state if no income
-    if (data.length === 0) {
-        incomeChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['No income'],
-                datasets: [{
-                    data: [1],
-                    backgroundColor: ['#374151'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: false }
-                }
-            }
-        });
-        return;
-    }
-    
-    incomeChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: incomeColors,
-                borderWidth: 0,
-                hoverBorderWidth: 3,
-                hoverBorderColor: '#fff'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 15,
-                        usePointStyle: true,
-                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-primary')
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = formatCurrency(context.raw);
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.raw / total) * 100).toFixed(1);
-                            return `${label}: ${value} (${percentage}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
 
 // Google Drive integration
@@ -2548,37 +2350,6 @@ function formatDate(dateString) {
         month: 'short',
         day: 'numeric'
     });
-}
-
-function getCategoryIcon(category) {
-    const icons = {
-        food: '🍕',
-        transport: '🚗',
-        shopping: '🛒',
-        entertainment: '🎬',
-        bills: '💡',
-        health: '🏥',
-        income: '💰',
-        other: '📋'
-    };
-    return icons[category] || '📋';
-}
-
-function getCategoryName(category) {
-    const names = {
-        food: 'Food',
-        transport: 'Transport',
-        shopping: 'Shopping',
-        entertainment: 'Entertainment',
-        bills: 'Bills',
-        health: 'Health',
-        income: 'Income',
-        salary: 'Salary',
-        other_income: 'Other Income',
-        other: 'Other'
-    };
-    // Handle custom income source names (stored as category)
-    return names[category] || category || 'Other';
 }
 
 // Export/Import functionality for everyone
@@ -2762,4 +2533,700 @@ function switchAuthTab(tab) {
         signUpForm.style.display = 'flex';
         title.textContent = 'Create Database Account';
     }
+}
+
+// Smart Insights Generator
+function updateInsights() {
+    const insightsOverlay = document.getElementById('chartInsightsOverlay');
+    if (!insightsOverlay) return;
+    
+    const insights = [];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    // Get current month data
+    const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    const currentMonthTransactions = transactions.filter(t => t.date && t.date.startsWith(currentMonthStr));
+    const currentMonthExpense = currentMonthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const currentMonthIncome = currentMonthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    
+    // Get last month data
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    const lastMonthStr = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, '0')}`;
+    const lastMonthTransactions = transactions.filter(t => t.date && t.date.startsWith(lastMonthStr));
+    const lastMonthExpense = lastMonthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const lastMonthIncome = lastMonthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    
+    // Get last 3 months data for trend analysis
+    const last3MonthsExpenses = [];
+    const last3MonthsIncomes = [];
+    for (let i = 1; i <= 3; i++) {
+        const m = currentMonth - i;
+        const y = m < 0 ? currentYear - 1 : currentYear;
+        const month = m < 0 ? 12 + m : m;
+        const monthStr = `${y}-${String(month + 1).padStart(2, '0')}`;
+        const monthTx = transactions.filter(t => t.date && t.date.startsWith(monthStr));
+        last3MonthsExpenses.push(monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+        last3MonthsIncomes.push(monthTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+    }
+    const avg3MonthExpense = last3MonthsExpenses.reduce((a, b) => a + b, 0) / 3;
+    const avg3MonthIncome = last3MonthsIncomes.reduce((a, b) => a + b, 0) / 3;
+    
+    // Insight 1: Expense comparison with last month
+    if (lastMonthExpense > 0) {
+        const expenseChange = ((currentMonthExpense - lastMonthExpense) / lastMonthExpense * 100).toFixed(0);
+        const expenseChangeAbs = Math.abs(expenseChange);
+        if (currentMonthExpense > lastMonthExpense) {
+            insights.push({
+                type: 'negative',
+                icon: 'fa-arrow-trend-up',
+                text: `Spending up ${expenseChangeAbs}% this month`,
+                detail: `You spent ₹${(currentMonthExpense - lastMonthExpense).toLocaleString('en-IN')} more than last month`,
+                value: `₹${currentMonthExpense.toLocaleString('en-IN')}`
+            });
+        } else if (currentMonthExpense < lastMonthExpense) {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-arrow-trend-down',
+                text: `Spending down ${expenseChangeAbs}% this month`,
+                detail: `Great! You saved ₹${(lastMonthExpense - currentMonthExpense).toLocaleString('en-IN')} compared to last month`,
+                value: `₹${currentMonthExpense.toLocaleString('en-IN')}`
+            });
+        }
+    }
+    
+    // Insight 2: Income comparison
+    if (lastMonthIncome > 0) {
+        const incomeChange = ((currentMonthIncome - lastMonthIncome) / lastMonthIncome * 100).toFixed(0);
+        const incomeChangeAbs = Math.abs(incomeChange);
+        if (currentMonthIncome > lastMonthIncome) {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-coins',
+                text: `Income up ${incomeChangeAbs}% this month`,
+                detail: `You earned ₹${(currentMonthIncome - lastMonthIncome).toLocaleString('en-IN')} more than last month`,
+                value: `₹${currentMonthIncome.toLocaleString('en-IN')}`
+            });
+        } else if (currentMonthIncome < lastMonthIncome) {
+            insights.push({
+                type: 'warning',
+                icon: 'fa-chart-line',
+                text: `Income down ${incomeChangeAbs}% this month`,
+                detail: `You earned ₹${(lastMonthIncome - currentMonthIncome).toLocaleString('en-IN')} less than last month`,
+                value: `₹${currentMonthIncome.toLocaleString('en-IN')}`
+            });
+        }
+    }
+    
+    // Insight 3: Highest expense month in last 6 months
+    const last6MonthsData = [];
+    for (let i = 0; i < 6; i++) {
+        const m = currentMonth - i;
+        const y = m < 0 ? currentYear - 1 : currentYear;
+        const month = m < 0 ? 12 + m : m;
+        const monthStr = `${y}-${String(month + 1).padStart(2, '0')}`;
+        const monthName = new Date(y, month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        const monthTx = transactions.filter(t => t.date && t.date.startsWith(monthStr));
+        const expense = monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+        last6MonthsData.push({ monthStr, monthName, expense });
+    }
+    
+    const maxExpenseMonth = last6MonthsData.reduce((max, curr) => curr.expense > max.expense ? curr : max, { expense: 0 });
+    if (maxExpenseMonth.expense > 0 && maxExpenseMonth.monthStr === currentMonthStr) {
+        insights.push({
+            type: 'warning',
+            icon: 'fa-exclamation-triangle',
+            text: 'Highest spending month!',
+            detail: 'This is your highest expense month in the last 6 months',
+            value: `₹${maxExpenseMonth.expense.toLocaleString('en-IN')}`
+        });
+    } else if (maxExpenseMonth.expense > 0) {
+        insights.push({
+            type: 'neutral',
+            icon: 'fa-calendar-check',
+            text: `Highest spending was ${maxExpenseMonth.monthName}`,
+            detail: `Peak spending month in the last 6 months`,
+            value: `₹${maxExpenseMonth.expense.toLocaleString('en-IN')}`
+        });
+    }
+    
+    // Insight 4: Savings rate
+    if (currentMonthIncome > 0) {
+        const savingsRate = ((currentMonthIncome - currentMonthExpense) / currentMonthIncome * 100).toFixed(0);
+        if (savingsRate > 30) {
+            insights.push({
+                type: 'positive',
+                icon: 'fa-piggy-bank',
+                text: `${savingsRate}% savings rate this month!`,
+                detail: 'Excellent! You\'re saving more than 30% of your income',
+                value: `₹${(currentMonthIncome - currentMonthExpense).toLocaleString('en-IN')}`
+            });
+        } else if (savingsRate > 0) {
+            insights.push({
+                type: 'neutral',
+                icon: 'fa-piggy-bank',
+                text: `${savingsRate}% savings rate this month`,
+                detail: 'You\'re saving money, keep it up!',
+                value: `₹${(currentMonthIncome - currentMonthExpense).toLocaleString('en-IN')}`
+            });
+        } else {
+            insights.push({
+                type: 'negative',
+                icon: 'fa-wallet',
+                text: 'Spending exceeds income!',
+                detail: 'You\'re spending more than you earn this month',
+                value: `-₹${Math.abs(currentMonthIncome - currentMonthExpense).toLocaleString('en-IN')}`
+            });
+        }
+    }
+    
+    // Insight 5: Compare to 3-month average
+    if (avg3MonthExpense > 0) {
+        const expenseVsAvg = ((currentMonthExpense - avg3MonthExpense) / avg3MonthExpense * 100).toFixed(0);
+        if (Math.abs(expenseVsAvg) > 20) {
+            if (currentMonthExpense > avg3MonthExpense) {
+                insights.push({
+                    type: 'warning',
+                    icon: 'fa-chart-bar',
+                    text: `${Math.abs(expenseVsAvg)}% above 3-month average`,
+                    detail: 'Your spending is higher than your usual pattern',
+                    value: `Avg: ₹${avg3MonthExpense.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                });
+            } else {
+                insights.push({
+                    type: 'positive',
+                    icon: 'fa-chart-bar',
+                    text: `${Math.abs(expenseVsAvg)}% below 3-month average`,
+                    detail: 'Great job keeping expenses under control!',
+                    value: `Avg: ₹${avg3MonthExpense.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                });
+            }
+        }
+    }
+    
+    // If no insights, show a default message
+    if (insights.length === 0) {
+        insights.push({
+            type: 'neutral',
+            icon: 'fa-lightbulb',
+            text: 'Add more transactions to see insights',
+            detail: 'Track your income and expenses to get personalized insights',
+            value: ''
+        });
+    }
+    
+    // Render insights (max 3 for overlay)
+    insightsOverlay.innerHTML = insights.slice(0, 3).map(insight => `
+        <div class="insight-card ${insight.type}">
+            <div class="insight-icon"><i class="fas ${insight.icon}"></i></div>
+            <div class="insight-content">
+                <p class="insight-text">${insight.text}</p>
+                <p class="insight-detail">${insight.detail}</p>
+                ${insight.value ? `<span class="insight-value">${insight.value}</span>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// Initialize Chart Legend Toggles
+function initializeChartLegendToggles() {
+    const incomeToggle = document.querySelector('.legend-item.income');
+    const expenseToggle = document.querySelector('.legend-item.expense');
+    
+    if (!incomeToggle || !expenseToggle) {
+        console.log('Chart legend elements not found, skipping toggle initialization');
+        return;
+    }
+    
+    // Set initial active states
+    updateLegendStates();
+    
+    // Add click event listeners
+    incomeToggle.addEventListener('click', () => toggleChartData('income'));
+    expenseToggle.addEventListener('click', () => toggleChartData('expense'));
+    
+    console.log('✅ Chart legend toggles initialized');
+}
+
+// Toggle chart data visibility
+function toggleChartData(dataType) {
+    const currentState = chartDataVisibility[dataType];
+    
+    // Prevent hiding both datasets
+    if (currentState && chartDataVisibility.income && chartDataVisibility.expense) {
+        // If both are visible and user clicks one, hide the other
+        chartDataVisibility.income = dataType === 'income';
+        chartDataVisibility.expense = dataType === 'expense';
+    } else if (!currentState) {
+        // If this dataset is hidden, show it
+        chartDataVisibility[dataType] = true;
+    } else {
+        // If only this dataset is visible, show both
+        chartDataVisibility.income = true;
+        chartDataVisibility.expense = true;
+    }
+    
+    // Update legend visual states
+    updateLegendStates();
+    
+    // Update chart with filtered data
+    updateComparisonChart();
+    
+    // Show feedback toast
+    const visibleDatasets = [];
+    if (chartDataVisibility.income) visibleDatasets.push('Income');
+    if (chartDataVisibility.expense) visibleDatasets.push('Expense');
+    
+    showToast(`Showing: ${visibleDatasets.join(' & ')}`, 'info');
+}
+
+// Update legend visual states
+function updateLegendStates() {
+    const incomeToggle = document.querySelector('.legend-item.income');
+    const expenseToggle = document.querySelector('.legend-item.expense');
+    
+    if (!incomeToggle || !expenseToggle) return;
+    
+    // Update income toggle
+    if (chartDataVisibility.income) {
+        incomeToggle.classList.add('active');
+        incomeToggle.classList.remove('inactive');
+    } else {
+        incomeToggle.classList.remove('active');
+        incomeToggle.classList.add('inactive');
+    }
+    
+    // Update expense toggle
+    if (chartDataVisibility.expense) {
+        expenseToggle.classList.add('active');
+        expenseToggle.classList.remove('inactive');
+    } else {
+        expenseToggle.classList.remove('active');
+        expenseToggle.classList.add('inactive');
+    }
+}
+
+// 3D Bar Chart for Income vs Expense Comparison with Smart Comparisons
+function updateComparisonChart() {
+    const ctx = document.getElementById('comparisonChart');
+    if (!ctx) return;
+    
+    // Destroy existing chart
+    if (comparisonChart) {
+        comparisonChart.destroy();
+    }
+    
+    const chartTitleElement = document.getElementById('chartTitle');
+    const comparisonSummary = document.getElementById('chartComparisonSummary');
+    
+    let labels = [];
+    let incomeData = [];
+    let expenseData = [];
+    let comparisonBadges = [];
+    
+    const today = new Date();
+    
+    if (currentView === 'daily') {
+        // Show last 7 days comparison
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+            labels.push(dayName);
+            
+            const dayTransactions = transactions.filter(t => t.date === dateStr);
+            incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+            expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+        }
+        
+        // Calculate week comparisons
+        const thisWeekExpense = expenseData.reduce((a, b) => a + b, 0);
+        const thisWeekIncome = incomeData.reduce((a, b) => a + b, 0);
+        
+        // Get last week data
+        let lastWeekExpense = 0;
+        let lastWeekIncome = 0;
+        for (let i = 7; i <= 13; i++) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const dayTx = transactions.filter(t => t.date === dateStr);
+            lastWeekExpense += dayTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            lastWeekIncome += dayTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+        }
+        
+        if (lastWeekExpense > 0) {
+            const expChange = ((thisWeekExpense - lastWeekExpense) / lastWeekExpense * 100).toFixed(0);
+            comparisonBadges.push({
+                type: thisWeekExpense > lastWeekExpense ? 'up' : 'down',
+                icon: thisWeekExpense > lastWeekExpense ? 'fa-arrow-up' : 'fa-arrow-down',
+                text: `${Math.abs(expChange)}% ${thisWeekExpense > lastWeekExpense ? 'more' : 'less'} expenses vs last week`
+            });
+        }
+        
+        if (lastWeekIncome > 0) {
+            const incChange = ((thisWeekIncome - lastWeekIncome) / lastWeekIncome * 100).toFixed(0);
+            comparisonBadges.push({
+                type: thisWeekIncome > lastWeekIncome ? 'down' : 'up',
+                icon: thisWeekIncome > lastWeekIncome ? 'fa-arrow-up' : 'fa-arrow-down',
+                text: `${Math.abs(incChange)}% ${thisWeekIncome > lastWeekIncome ? 'more' : 'less'} income vs last week`
+            });
+        }
+        
+        // Find highest expense day
+        const maxExpenseIdx = expenseData.indexOf(Math.max(...expenseData));
+        if (expenseData[maxExpenseIdx] > 0) {
+            comparisonBadges.push({
+                type: 'highlight',
+                icon: 'fa-fire',
+                text: `${labels[maxExpenseIdx]} was your highest spending day`
+            });
+        }
+        
+        if (chartTitleElement) chartTitleElement.textContent = 'Last 7 Days Comparison';
+        
+    } else if (currentView === 'monthly') {
+        // Show last 6 months comparison
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+            labels.push(monthName);
+            
+            const monthTransactions = transactions.filter(t => t.date && t.date.startsWith(monthStr));
+            incomeData.push(monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+            expenseData.push(monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+        }
+        
+        // Find highest expense month
+        const maxExpenseVal = Math.max(...expenseData);
+        const maxExpenseIdx = expenseData.indexOf(maxExpenseVal);
+        if (maxExpenseVal > 0) {
+            comparisonBadges.push({
+                type: maxExpenseIdx === 5 ? 'up' : 'highlight',
+                icon: 'fa-chart-line',
+                text: maxExpenseIdx === 5 ? 'This month has highest expenses!' : `${labels[maxExpenseIdx]} had highest expenses (₹${maxExpenseVal.toLocaleString('en-IN')})`
+            });
+        }
+        
+        // Find highest income month
+        const maxIncomeVal = Math.max(...incomeData);
+        const maxIncomeIdx = incomeData.indexOf(maxIncomeVal);
+        if (maxIncomeVal > 0) {
+            comparisonBadges.push({
+                type: maxIncomeIdx === 5 ? 'down' : 'neutral',
+                icon: 'fa-trophy',
+                text: maxIncomeIdx === 5 ? 'This month has highest income!' : `${labels[maxIncomeIdx]} had highest income (₹${maxIncomeVal.toLocaleString('en-IN')})`
+            });
+        }
+        
+        // Compare last 3 months trend
+        const last3Expenses = expenseData.slice(-3);
+        if (last3Expenses[2] > last3Expenses[1] && last3Expenses[1] > last3Expenses[0]) {
+            comparisonBadges.push({
+                type: 'up',
+                icon: 'fa-exclamation-triangle',
+                text: 'Expenses increasing for 3 months straight!'
+            });
+        } else if (last3Expenses[2] < last3Expenses[1] && last3Expenses[1] < last3Expenses[0]) {
+            comparisonBadges.push({
+                type: 'down',
+                icon: 'fa-thumbs-up',
+                text: 'Great! Expenses decreasing for 3 months!'
+            });
+        }
+        
+        if (chartTitleElement) chartTitleElement.textContent = 'Last 6 Months Comparison';
+        
+    } else if (currentView === 'yearly') {
+        // Show last 5 years comparison
+        const currentYear = today.getFullYear();
+        for (let i = 4; i >= 0; i--) {
+            const year = currentYear - i;
+            labels.push(year.toString());
+            
+            const yearTransactions = transactions.filter(t => t.date && t.date.startsWith(year.toString()));
+            incomeData.push(yearTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+            expenseData.push(yearTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+        }
+        
+        // Find best year (highest savings)
+        const savings = incomeData.map((inc, i) => inc - expenseData[i]);
+        const bestYearIdx = savings.indexOf(Math.max(...savings));
+        if (savings[bestYearIdx] > 0) {
+            comparisonBadges.push({
+                type: 'neutral',
+                icon: 'fa-star',
+                text: `${labels[bestYearIdx]} was your best savings year (₹${savings[bestYearIdx].toLocaleString('en-IN')})`
+            });
+        }
+        
+        // Compare this year with last year
+        if (expenseData[4] > 0 && expenseData[3] > 0) {
+            const yearChange = ((expenseData[4] - expenseData[3]) / expenseData[3] * 100).toFixed(0);
+            comparisonBadges.push({
+                type: expenseData[4] > expenseData[3] ? 'up' : 'down',
+                icon: expenseData[4] > expenseData[3] ? 'fa-arrow-up' : 'fa-arrow-down',
+                text: `${Math.abs(yearChange)}% ${expenseData[4] > expenseData[3] ? 'more' : 'less'} expenses than last year`
+            });
+        }
+        
+        if (chartTitleElement) chartTitleElement.textContent = 'Last 5 Years Comparison';
+    } else if (currentView === 'custom' && customStartDate && customEndDate) {
+        // Show custom range - group by appropriate interval
+        const startDate = new Date(customStartDate + 'T00:00:00');
+        const endDate = new Date(customEndDate + 'T00:00:00');
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+        
+        if (daysDiff <= 14) {
+            // Show daily for ranges up to 2 weeks
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                const dayName = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                labels.push(dayName);
+                
+                const dayTransactions = transactions.filter(t => t.date === dateStr);
+                incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+                expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+            }
+        } else if (daysDiff <= 90) {
+            // Show weekly for ranges up to 3 months
+            let weekStart = new Date(startDate);
+            while (weekStart <= endDate) {
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                if (weekEnd > endDate) weekEnd.setTime(endDate.getTime());
+                
+                const weekLabel = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                labels.push(weekLabel);
+                
+                let weekIncome = 0;
+                let weekExpense = 0;
+                for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    const dayTx = transactions.filter(t => t.date === dateStr);
+                    weekIncome += dayTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+                    weekExpense += dayTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+                }
+                incomeData.push(weekIncome);
+                expenseData.push(weekExpense);
+                
+                weekStart.setDate(weekStart.getDate() + 7);
+            }
+        } else {
+            // Show monthly for longer ranges
+            const startMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+            const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+            
+            for (let d = new Date(startMonth); d <= endMonth; d.setMonth(d.getMonth() + 1)) {
+                const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                const monthName = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                labels.push(monthName);
+                
+                const monthTx = transactions.filter(t => t.date && t.date.startsWith(monthStr) && t.date >= customStartDate && t.date <= customEndDate);
+                incomeData.push(monthTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+                expenseData.push(monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+            }
+        }
+        
+        // Custom range insights
+        const totalRangeExpense = expenseData.reduce((a, b) => a + b, 0);
+        const totalRangeIncome = incomeData.reduce((a, b) => a + b, 0);
+        const netSavings = totalRangeIncome - totalRangeExpense;
+        
+        comparisonBadges.push({
+            type: 'neutral',
+            icon: 'fa-calendar-check',
+            text: `${daysDiff} days selected`
+        });
+        
+        if (netSavings > 0) {
+            comparisonBadges.push({
+                type: 'down',
+                icon: 'fa-piggy-bank',
+                text: `Net savings: ₹${netSavings.toLocaleString('en-IN')}`
+            });
+        } else if (netSavings < 0) {
+            comparisonBadges.push({
+                type: 'up',
+                icon: 'fa-exclamation-circle',
+                text: `Net spending: ₹${Math.abs(netSavings).toLocaleString('en-IN')}`
+            });
+        }
+        
+        // Find highest expense period
+        if (expenseData.length > 0) {
+            const maxExpenseVal = Math.max(...expenseData);
+            const maxExpenseIdx = expenseData.indexOf(maxExpenseVal);
+            if (maxExpenseVal > 0) {
+                comparisonBadges.push({
+                    type: 'highlight',
+                    icon: 'fa-fire',
+                    text: `Peak spending: ${labels[maxExpenseIdx]} (₹${maxExpenseVal.toLocaleString('en-IN')})`
+                });
+            }
+        }
+        
+        if (chartTitleElement) chartTitleElement.textContent = 'Custom Range Analysis';
+    }
+    
+    // Render comparison badges
+    if (comparisonSummary) {
+        comparisonSummary.innerHTML = comparisonBadges.slice(0, 3).map(badge => `
+            <span class="comparison-badge ${badge.type}">
+                <i class="fas ${badge.icon}"></i>
+                ${badge.text}
+            </span>
+        `).join('');
+    }
+    
+    // Create 3D effect with enhanced gradients
+    const context = ctx.getContext('2d');
+    const incomeGradient = context.createLinearGradient(0, 0, 0, 350);
+    incomeGradient.addColorStop(0, 'rgba(34, 197, 94, 1)');
+    incomeGradient.addColorStop(0.4, 'rgba(34, 197, 94, 0.85)');
+    incomeGradient.addColorStop(1, 'rgba(22, 163, 74, 0.5)');
+    
+    const expenseGradient = context.createLinearGradient(0, 0, 0, 350);
+    expenseGradient.addColorStop(0, 'rgba(239, 68, 68, 1)');
+    expenseGradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.85)');
+    expenseGradient.addColorStop(1, 'rgba(220, 38, 38, 0.5)');
+    
+    // Create datasets based on visibility settings
+    const datasets = [];
+    
+    if (chartDataVisibility.income) {
+        datasets.push({
+            label: 'Income',
+            data: incomeData,
+            backgroundColor: incomeGradient,
+            borderColor: 'rgba(34, 197, 94, 1)',
+            borderWidth: 2,
+            borderRadius: { topLeft: 8, topRight: 8 },
+            borderSkipped: false,
+            hoverBackgroundColor: 'rgba(34, 197, 94, 0.95)',
+            hoverBorderWidth: 3
+        });
+    }
+    
+    if (chartDataVisibility.expense) {
+        datasets.push({
+            label: 'Expense',
+            data: expenseData,
+            backgroundColor: expenseGradient,
+            borderColor: 'rgba(239, 68, 68, 1)',
+            borderWidth: 2,
+            borderRadius: { topLeft: 8, topRight: 8 },
+            borderSkipped: false,
+            hoverBackgroundColor: 'rgba(239, 68, 68, 0.95)',
+            hoverBorderWidth: 3
+        });
+    }
+
+    comparisonChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    titleFont: { size: 14, weight: '600' },
+                    bodyFont: { size: 13 },
+                    padding: 14,
+                    cornerRadius: 10,
+                    displayColors: true,
+                    boxPadding: 6,
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
+                        label: function(context) {
+                            const value = context.raw;
+                            return `${context.dataset.label}: ₹${value.toLocaleString('en-IN')}`;
+                        },
+                        afterBody: function(context) {
+                            // Handle dynamic datasets for balance calculation
+                            let income = 0;
+                            let expense = 0;
+                            
+                            context.forEach(item => {
+                                if (item.dataset.label === 'Income') {
+                                    income = item.raw || 0;
+                                } else if (item.dataset.label === 'Expense') {
+                                    expense = item.raw || 0;
+                                }
+                            });
+                            
+                            // If only one dataset is visible, get the other from original data
+                            if (!chartDataVisibility.income && context.length === 1) {
+                                const dataIndex = context[0].dataIndex;
+                                income = incomeData[dataIndex] || 0;
+                            } else if (!chartDataVisibility.expense && context.length === 1) {
+                                const dataIndex = context[0].dataIndex;
+                                expense = expenseData[dataIndex] || 0;
+                            }
+                            
+                            const balance = income - expense;
+                            return [`\nBalance: ₹${balance.toLocaleString('en-IN')}`];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: { size: 12, weight: '600' },
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.06)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        font: { size: 11, weight: '500' },
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096',
+                        callback: function(value) {
+                            if (value >= 10000000) return '₹' + (value / 10000000).toFixed(1) + 'Cr';
+                            if (value >= 100000) return '₹' + (value / 100000).toFixed(1) + 'L';
+                            if (value >= 1000) return '₹' + (value / 1000).toFixed(0) + 'K';
+                            return '₹' + value;
+                        }
+                    }
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeOutQuart',
+                delay: function(context) {
+                    return context.dataIndex * 100;
+                }
+            },
+            barPercentage: 0.75,
+            categoryPercentage: 0.85
+        }
+    });
+    
+    // Update insights when chart updates
+    updateInsights();
 }

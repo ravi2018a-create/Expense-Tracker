@@ -101,7 +101,38 @@
                     <i class="fas fa-calendar"></i>
                     Yearly
                 </button>
+                <button class="nav-btn" data-view="custom">
+                    <i class="fas fa-sliders-h"></i>
+                    Custom
+                </button>
             </nav>
+
+            <!-- Custom Date Range Picker -->
+            <div class="custom-range-section" id="customRangeSection" style="display: none;">
+                <div class="custom-range-container">
+                    <div class="range-input-group">
+                        <label for="startDate"><i class="fas fa-calendar-alt"></i> From</label>
+                        <input type="date" id="startDate" class="range-input">
+                    </div>
+                    <div class="range-separator">
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                    <div class="range-input-group">
+                        <label for="endDate"><i class="fas fa-calendar-alt"></i> To</label>
+                        <input type="date" id="endDate" class="range-input">
+                    </div>
+                    <button type="button" class="apply-range-btn" id="applyRangeBtn">
+                        <i class="fas fa-check"></i> Apply
+                    </button>
+                </div>
+                <div class="quick-ranges">
+                    <button class="quick-range-btn" data-range="7">Last 7 Days</button>
+                    <button class="quick-range-btn" data-range="30">Last 30 Days</button>
+                    <button class="quick-range-btn" data-range="90">Last 3 Months</button>
+                    <button class="quick-range-btn" data-range="180">Last 6 Months</button>
+                    <button class="quick-range-btn" data-range="365">Last Year</button>
+                </div>
+            </div>
 
             <!-- Summary Cards -->
             <div class="summary-section">
@@ -134,6 +165,8 @@
                 </div>
             </div>
 
+
+
             <!-- Add Transaction Form -->
             <div class="add-transaction-section">
                 <form id="transactionForm" class="transaction-form">
@@ -155,23 +188,6 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="category">Category</label>
-                            <select id="category" required>
-                                <option value="">Select category</option>
-                                <option value="food">🍕 Food</option>
-                                <option value="transport">🚗 Transport</option>
-                                <option value="shopping">🛒 Shopping</option>
-                                <option value="entertainment">🎬 Entertainment</option>
-                                <option value="bills">💡 Bills</option>
-                                <option value="health">🏥 Health</option>
-                                <option value="other">📋 Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="customIncomeSourceGroup" style="display: none;">
-                            <label for="customIncomeSource">Income Source Name</label>
-                            <input type="text" id="customIncomeSource" placeholder="e.g., Freelance, Business, Rent...">
-                        </div>
-                        <div class="form-group">
                             <label for="date">Date</label>
                             <input type="date" id="date" required>
                         </div>
@@ -185,44 +201,33 @@
                 </form>
             </div>
 
-            <!-- Filters -->
-            <div class="filters-section">
-                <div class="date-filter">
-                    <input type="month" id="monthFilter" class="filter-input">
-                    <input type="number" id="yearFilter" class="filter-input" placeholder="Year" min="2020" max="2030">
-                </div>
-                <div class="category-filter">
-                    <select id="categoryFilter" class="filter-input">
-                        <option value="">All Categories</option>
-                        <option value="food">🍕 Food</option>
-                        <option value="transport">🚗 Transport</option>
-                        <option value="shopping">🛒 Shopping</option>
-                        <option value="entertainment">🎬 Entertainment</option>
-                        <option value="bills">💡 Bills</option>
-                        <option value="health">🏥 Health</option>
-                        <option value="income">💰 Income</option>
-                        <option value="other">📋 Other</option>
-                    </select>
-                </div>
-                <button id="clearFilters" class="clear-filters-btn">
-                    <i class="fas fa-times"></i>
-                    Clear Filters
-                </button>
-            </div>
-
-            <!-- Chart Section -->
+            <!-- Chart Section - Income vs Expense Comparison -->
             <div class="chart-section">
-                <div class="charts-wrapper">
-                    <div class="chart-box">
-                        <h3 class="chart-title"><i class="fas fa-arrow-down" style="color: #ef4444;"></i> Expenses by Category</h3>
-                        <div class="chart-container">
-                            <canvas id="expenseChart"></canvas>
+                <div class="chart-header">
+                    <h3 class="chart-title">
+                        <i class="fas fa-chart-bar"></i>
+                        <span id="chartTitle">Income vs Expense Comparison</span>
+                    </h3>
+                    <div class="chart-legend">
+                        <span class="legend-item income"><span class="legend-dot"></span> Income</span>
+                        <span class="legend-item expense"><span class="legend-dot"></span> Expense</span>
+                    </div>
+                </div>
+                <div class="chart-comparison-summary" id="chartComparisonSummary">
+                    <!-- Will be populated by JS -->
+                </div>
+                <div class="chart-content-layout">
+                    <div class="chart-area">
+                        <div class="chart-container-3d">
+                            <canvas id="comparisonChart"></canvas>
                         </div>
                     </div>
-                    <div class="chart-box">
-                        <h3 class="chart-title"><i class="fas fa-arrow-up" style="color: #22c55e;"></i> Income by Category</h3>
-                        <div class="chart-container">
-                            <canvas id="incomeChart"></canvas>
+                    <div class="chart-insights-area">
+                        <div class="insights-header">
+                            <h4><i class="fas fa-lightbulb"></i> Smart Insights</h4>
+                        </div>
+                        <div class="chart-insights-container" id="chartInsightsOverlay">
+                            <!-- Smart insights will be populated by JavaScript -->
                         </div>
                     </div>
                 </div>
@@ -369,22 +374,6 @@
                             <option value="expense">Expense</option>
                             <option value="income">Income</option>
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="editCategory">Category</label>
-                        <select id="editCategory" required>
-                            <option value="food">🍕 Food</option>
-                            <option value="transport">🚗 Transport</option>
-                            <option value="shopping">🛒 Shopping</option>
-                            <option value="entertainment">🎬 Entertainment</option>
-                            <option value="bills">💡 Bills</option>
-                            <option value="health">🏥 Health</option>
-                            <option value="other">📋 Other</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="editCustomIncomeSourceGroup" style="display: none;">
-                        <label for="editCustomIncomeSource">Income Source Name</label>
-                        <input type="text" id="editCustomIncomeSource" placeholder="e.g., Freelance, Business, Rent...">
                     </div>
                     <div class="form-group">
                         <label for="editDate">Date</label>

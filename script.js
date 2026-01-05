@@ -2717,17 +2717,19 @@ function updateInsights() {
         });
     }
     
-    // Render insights (max 3 for overlay)
-    insightsOverlay.innerHTML = insights.slice(0, 3).map(insight => `
-        <div class="insight-card ${insight.type}">
-            <div class="insight-icon"><i class="fas ${insight.icon}"></i></div>
-            <div class="insight-content">
-                <p class="insight-text">${insight.text}</p>
-                <p class="insight-detail">${insight.detail}</p>
-                ${insight.value ? `<span class="insight-value">${insight.value}</span>` : ''}
-            </div>
-        </div>
-    `).join('');
+    // Render single line insight
+    if (insights.length > 0) {
+        const topInsight = insights[0];
+        insightsOverlay.innerHTML = `
+            <i class="fas ${topInsight.icon} insight-icon"></i>
+            <span class="insight-text">${topInsight.text} ${topInsight.value ? '- ' + topInsight.value : ''}</span>
+        `;
+    } else {
+        insightsOverlay.innerHTML = `
+            <i class="fas fa-lightbulb insight-icon"></i>
+            <span class="insight-text">Add transactions to see smart insights</span>
+        `;
+    }
 }
 
 // Initialize Chart Legend Toggles

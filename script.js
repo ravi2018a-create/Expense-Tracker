@@ -1015,6 +1015,31 @@ function applyQuickRange(days) {
     updateUI();
 }
 
+// Apply quick period range from header buttons
+function applyQuickPeriodRange(days) {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - days);
+    
+    // Set to custom view for filtering but don't show UI
+    currentView = 'custom';
+    customStartDate = formatDateForInput(startDate);
+    customEndDate = formatDateForInput(today);
+    
+    // Update the custom range inputs silently
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    if (startDateInput && endDateInput) {
+        startDateInput.value = customStartDate;
+        endDateInput.value = customEndDate;
+    }
+    
+    console.log('📅 Quick period range applied:', customStartDate, 'to', customEndDate);
+    
+    updatePeriodDisplay();
+    updateUI();
+}
+
 // Setup event listeners
 function setupEventListeners() {
     console.log('🔧 Setting up event listeners...');
@@ -1165,6 +1190,19 @@ function setupEventListeners() {
             goToCurrentPeriod();
         });
     }
+    
+    // Quick period buttons in header
+    const quickPeriodBtns = document.querySelectorAll('.quick-period-btn');
+    quickPeriodBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const days = parseInt(btn.dataset.days);
+            applyQuickPeriodRange(days);
+            
+            // Update active state
+            quickPeriodBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
     
     // Custom date range controls
     setupCustomRangeListeners();
@@ -1914,6 +1952,25 @@ function goToCurrentPeriod() {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
+    
+    // Reset to daily view and clear custom date ranges
+    currentView = 'daily';
+    customStartDate = null;
+    customEndDate = null;
+    
+    // Update nav buttons to show daily view is active
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    const dailyBtn = document.querySelector('.nav-btn[data-view="daily"]');
+    if (dailyBtn) dailyBtn.classList.add('active');
+    
+    // Hide custom range section if visible
+    const customRangeSection = document.getElementById('customRangeSection');
+    if (customRangeSection) {
+        customRangeSection.style.display = 'none';
+    }
+    
+    // Clear active state from quick period buttons
+    document.querySelectorAll('.quick-period-btn').forEach(btn => btn.classList.remove('active'));
     
     const dateSelector = document.getElementById('dateSelector');
     const monthSelector = document.getElementById('monthSelector');

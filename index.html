@@ -78,10 +78,19 @@
                 </button>
             </div>
             <div class="period-footer">
-                <span id="transactionCount" class="transaction-badge">0 transactions</span>
-                <button class="today-btn-small" id="goToToday" title="Go to Today">
-                    <i class="fas fa-redo"></i> Today
-                </button>
+                <div class="period-footer-left">
+                    <span id="transactionCount" class="transaction-badge">0 transactions</span>
+                    <button class="today-btn-small" id="goToToday" title="Go to Today">
+                        <i class="fas fa-redo"></i> Today
+                    </button>
+                </div>
+                <div class="quick-period-buttons">
+                    <button class="quick-period-btn" data-days="7" title="Last 7 Days">LAST 7D</button>
+                    <button class="quick-period-btn" data-days="30" title="Last 30 Days">LAST 30D</button>
+                    <button class="quick-period-btn" data-days="90" title="Last 3 Months">LAST 3M</button>
+                    <button class="quick-period-btn" data-days="180" title="Last 6 Months">LAST 6M</button>
+                    <button class="quick-period-btn" data-days="365" title="Last Year">LAST 1Y</button>
+                </div>
             </div>
         </div>
 
@@ -315,26 +324,14 @@
         <div class="footer-content">
             <div class="footer-info">
                 <h3>ExpenseTracker</h3>
-                <p>Developed by <strong>Raviranjan Bhardwaj</strong></p>
-                <p>Created on <strong>04 Jan 2026</strong></p>
+                <p>by Raviranjan Bhardwaj • Jan 2026</p>
             </div>
-            <div class="footer-contact">
-                <h4>Contact Information</h4>
-                <p><i class="fas fa-phone"></i> <a href="tel:+918757650019">+91 8757650019</a></p>
-                <p><i class="fas fa-envelope"></i> <a href="mailto:ravi2018a@gmail.com">ravi2018a@gmail.com</a></p>
+            <div class="footer-links">
+                <a href="tel:+918757650019">📞 +91 8757650019</a>
+                <a href="mailto:ravi2018a@gmail.com">📧 ravi2018a@gmail.com</a>
+                <a href="#">📊 Features</a>
             </div>
-            <div class="footer-features">
-                <h4>Features</h4>
-                <ul>
-                    <li>✓ Multi-user support</li>
-                    <li>✓ Private data storage</li>
-                    <li>✓ Export/Import functionality</li>
-                    <li>✓ Daily/Monthly/Yearly views</li>
-                </ul>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <p>&copy; 2026 ExpenseTracker. Developed with ❤️ by Raviranjan Bhardwaj</p>
+            <p class="footer-copyright">2026 Made with love</p>
         </div>
     </footer>
 

@@ -57,8 +57,13 @@ async function handleAuthCallback() {
 
 // App State
 let currentUser = null;
-let transactions = [];
-let currentView = 'daily';
+// Updated data structure for categories
+let categories = {
+    'daily': { name: 'Daily Expenses', icon: 'fas fa-calendar-day', transactions: [] }
+};
+let activeCategory = 'daily'; // Current active category
+let transactions = []; // Legacy support - will be phased out
+let currentView = 'all'; // Start with showing all transactions
 let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
 let comparisonChart = null; // Chart instance
@@ -304,6 +309,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Load transactions (from database if authenticated, localStorage if not)
     await loadTransactions();
     updateUI();
+    updateTransactionCount(); // Ensure transaction count is displayed
     setCurrentDate();
     
     // Hide loading overlay after initialization (backup)
@@ -1037,7 +1043,7 @@ function applyQuickPeriodRange(days) {
     console.log('📅 Quick period range applied:', customStartDate, 'to', customEndDate);
     
     updatePeriodDisplay();
-    updateUI();
+    // Don't call updateUI here as it's called by the button handler
 }
 
 // Setup event listeners
@@ -1143,6 +1149,71 @@ function setupEventListeners() {
         });
     }
     
+    // Category form handler
+    const categoryForm = document.getElementById('categoryForm');
+    if (categoryForm) {
+        categoryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('categoryName').value.trim();
+            const selectedIcon = document.querySelector('.icon-option.active')?.getAttribute('data-icon') || 'fas fa-wallet';
+            const editingId = categoryForm.getAttribute('data-editing');
+            
+            if (!name) {
+                showToast('Please enter a category name!', 'error');
+                return;
+            }
+            
+            if (editingId) {
+                // Edit existing category
+                if (categories[editingId]) {
+                    categories[editingId].name = name;
+                    categories[editingId].icon = selectedIcon;
+                    await saveCategories();
+                    updateCategoryTabs();
+                    updateCategoryList();
+                    showToast('Category updated successfully!', 'success');
+                    categoryForm.removeAttribute('data-editing');
+                    closeCategoryModal();
+                }
+            } else {
+                // Add new category
+                if (await addCategory(name, selectedIcon)) {
+                    closeCategoryModal();
+                }
+            }
+        });
+    }
+    
+    // Icon selector
+    const iconOptions = document.querySelectorAll('.icon-option');
+    iconOptions.forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.preventDefault();
+            iconOptions.forEach(opt => opt.classList.remove('active'));
+            option.classList.add('active');
+        });
+    });
+    
+    // Close modals on outside click
+    const categoryModal = document.getElementById('categoryModal');
+    if (categoryModal) {
+        categoryModal.addEventListener('click', (e) => {
+            if (e.target === categoryModal) {
+                closeCategoryModal();
+            }
+        });
+    }
+    
+    const categoryManageModal = document.getElementById('categoryManageModal');
+    if (categoryManageModal) {
+        categoryManageModal.addEventListener('click', (e) => {
+            if (e.target === categoryManageModal) {
+                closeCategoryManageModal();
+            }
+        });
+    }
+    
     // Period selectors (in header)
     const dateSelector = document.getElementById('dateSelector');
     if (dateSelector) {
@@ -1195,14 +1266,60 @@ function setupEventListeners() {
     const quickPeriodBtns = document.querySelectorAll('.quick-period-btn');
     quickPeriodBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            const days = parseInt(btn.dataset.days);
-            applyQuickPeriodRange(days);
+            // Handle different period types
+            if (btn.dataset.period === 'today') {
+                // Show today's transactions and enable left/right navigation
+                const today = new Date().toISOString().split('T')[0];
+                customStartDate = today;
+                customEndDate = today;
+                currentView = 'daily'; // Set to daily for navigation
+                
+                // Update date selector for navigation
+                const dateSelector = document.getElementById('dateSelector');
+                if (dateSelector) {
+                    dateSelector.value = today;
+                }
+            } else if (btn.dataset.days) {
+                // Show last X days
+                const days = parseInt(btn.dataset.days);
+                applyQuickPeriodRange(days);
+            }
+            
+            // Update active state for period buttons only
+            quickPeriodBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Remove active from ALL button
+            const allBtn = document.querySelector('.all-transactions-btn');
+            if (allBtn) allBtn.classList.remove('active');
+            
+            // Update UI and force chart refresh
+            updateUI();
+            
+            // Force chart update with a small delay to ensure DOM is updated
+            setTimeout(() => {
+                updateComparisonChart();
+            }, 50);
+        });
+    });
+    
+    // Separate ALL button handler
+    const allBtn = document.querySelector('.all-transactions-btn');
+    if (allBtn) {
+        allBtn.addEventListener('click', () => {
+            // Show all transactions
+            customStartDate = null;
+            customEndDate = null;
+            currentView = 'all';
             
             // Update active state
             quickPeriodBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            allBtn.classList.add('active');
+            
+            // Update UI
+            updateUI();
         });
-    });
+    }
     
     // Custom date range controls
     setupCustomRangeListeners();
@@ -1317,6 +1434,17 @@ function setupAuthModalListeners() {
             }
         });
     }
+    
+    // Initialize category system
+    console.log('🏗️ Initializing category system...');
+    
+    // Ensure current transactions match active category
+    transactions = categories[activeCategory].transactions;
+    
+    // Update category tabs in UI
+    updateCategoryTabs();
+    
+    console.log(`✅ Category system initialized - Active: ${categories[activeCategory].name} (${transactions.length} transactions)`);
 }
 
 // Theme management with backend storage
@@ -1445,7 +1573,7 @@ function updatePeriodDisplay() {
             day: 'numeric' 
         });
         periodDisplay.textContent = "Daily Summary";
-        dateDetails.textContent = dateStr;
+        dateDetails.innerHTML = `${dateStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
     } else if (currentView === 'monthly') {
         const monthSelector = document.getElementById('monthSelector');
         let displayDate = now;
@@ -1458,7 +1586,7 @@ function updatePeriodDisplay() {
             month: 'long'
         });
         periodDisplay.textContent = "Monthly Summary";
-        dateDetails.textContent = monthStr;
+        dateDetails.innerHTML = `${monthStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
     } else if (currentView === 'yearly') {
         const yearSelector = document.getElementById('yearSelector');
         let displayYear = now.getFullYear();
@@ -1466,7 +1594,7 @@ function updatePeriodDisplay() {
             displayYear = yearSelector.value;
         }
         periodDisplay.textContent = "Yearly Summary";
-        dateDetails.textContent = `Year ${displayYear}`;
+        dateDetails.innerHTML = `Year ${displayYear}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
     } else if (currentView === 'custom') {
         periodDisplay.textContent = "Custom Range";
         if (customStartDate && customEndDate) {
@@ -1480,9 +1608,9 @@ function updatePeriodDisplay() {
                 day: 'numeric',
                 year: 'numeric'
             });
-            dateDetails.textContent = `${startStr} - ${endStr}`;
+            dateDetails.innerHTML = `${startStr} - ${endStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
         } else {
-            dateDetails.textContent = 'Select a date range';
+            dateDetails.innerHTML = 'Select a date range<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>';
         }
     }
     
@@ -1492,13 +1620,39 @@ function updatePeriodDisplay() {
 
 // Update transaction count display
 function updateTransactionCount() {
-    const countElement = document.getElementById('transactionCount');
-    if (!countElement) return;
+    console.log('🔢 updateTransactionCount called');
+    
+    // Wait for DOM to be ready if called too early
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', updateTransactionCount);
+        return;
+    }
+    
+    const countElement = document.getElementById('transactionCount'); // Legacy element
+    const headerCountElement = document.getElementById('transactionCountHeader'); // Header element
     
     const filteredTransactions = getFilteredTransactions();
     const count = filteredTransactions.length;
+    const countText = count === 1 ? '1 transaction' : `${count} transactions`;
     
-    countElement.textContent = count === 1 ? '1 transaction' : `${count} transactions`;
+    console.log(`📊 Transaction count: ${count}, filtered transactions:`, filteredTransactions.length);
+    
+    // Update legacy element if it exists
+    if (countElement) {
+        countElement.textContent = countText;
+        console.log('✅ Updated legacy transaction count element');
+    }
+    
+    // Update header element
+    if (headerCountElement) {
+        headerCountElement.textContent = `• ${countText}`;
+        console.log('✅ Updated header transaction count element');
+    } else {
+        console.log('❌ Header transaction count element not found');
+        console.log('🔍 DOM readyState:', document.readyState);
+        console.log('🔍 Available elements with transaction in ID:', 
+            Array.from(document.querySelectorAll('[id*="transaction"]')).map(el => el.id));
+    }
 }
 
 // Transaction management
@@ -1549,14 +1703,19 @@ async function handleAddTransaction(e) {
     if (validateTransaction(transaction)) {
         console.log('✅ Transaction validation passed');
         
-        // ALWAYS save to localStorage first as backup
-        transactions.push(transaction);
-        saveTransactions();
-        console.log('💾 Emergency backup: Transaction saved to localStorage');
+        // Add to active category's transactions
+        categories[activeCategory].transactions.push(transaction);
         
-        // Update UI immediately with localStorage data
+        // Update current transactions reference to active category
+        transactions = categories[activeCategory].transactions;
+        
+        // Save all categories
+        saveTransactions();
+        console.log(`💾 Transaction saved to category: ${categories[activeCategory].name}`);
+        
+        // Update UI immediately
         updateUI();
-        console.log('🔄 UI updated with localStorage backup');
+        console.log('🔄 UI updated for active category');
         
         if (currentUser && supabaseClient) {
             // Save directly to database
@@ -1803,8 +1962,12 @@ async function handleEditTransaction(e) {
                 }
             }
             
-            // Update local array
-            transactions[index] = updatedTransaction;
+            // Update local array in active category
+            categories[activeCategory].transactions[index] = updatedTransaction;
+            
+            // Update current transactions reference
+            transactions = categories[activeCategory].transactions;
+            
             saveTransactions();
             updateUI();
             closeEditModal();
@@ -1865,7 +2028,12 @@ async function deleteTransaction(id) {
             }
         }
         
-        transactions = transactions.filter(t => t.id !== id);
+        // Remove from active category's transactions
+        categories[activeCategory].transactions = categories[activeCategory].transactions.filter(t => t.id !== id);
+        
+        // Update current transactions reference
+        transactions = categories[activeCategory].transactions;
+        
         saveTransactions();
         updateUI();
         showToast('Transaction deleted successfully!', 'success');
@@ -1953,15 +2121,22 @@ function goToCurrentPeriod() {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     
-    // Reset to daily view and clear custom date ranges
-    currentView = 'daily';
+    // Reset to 'all' view and clear custom date ranges
+    currentView = 'all';
     customStartDate = null;
     customEndDate = null;
     
-    // Update nav buttons to show daily view is active
+    // Update nav buttons to show daily view is active (if they exist)
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     const dailyBtn = document.querySelector('.nav-btn[data-view="daily"]');
     if (dailyBtn) dailyBtn.classList.add('active');
+    
+    // Update quick period buttons - remove active from period buttons
+    document.querySelectorAll('.quick-period-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // Update ALL button to show it's active
+    const allBtn = document.querySelector('.all-transactions-btn');
+    if (allBtn) allBtn.classList.add('active');
     
     // Hide custom range section if visible
     const customRangeSection = document.getElementById('customRangeSection');
@@ -1993,22 +2168,183 @@ function formatDateForInput(date) {
 }
 
 // Data persistence with user separation
+// Category Management Functions
+function switchCategory(categoryId) {
+    if (!categories[categoryId]) return;
+    
+    // Update active category
+    activeCategory = categoryId;
+    
+    // Update UI
+    document.querySelectorAll('.category-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelector(`[data-category="${categoryId}"]`).classList.add('active');
+    
+    // Load transactions for this category
+    transactions = categories[activeCategory].transactions;
+    
+    // Update the UI
+    updateUI();
+    
+    console.log(`🔄 Switched to category: ${categories[activeCategory].name}`);
+}
+
+async function addCategory(name, icon) {
+    const categoryId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (categories[categoryId]) {
+        showToast('Category already exists!', 'error');
+        return false;
+    }
+    
+    categories[categoryId] = {
+        name: name,
+        icon: icon,
+        transactions: []
+    };
+    
+    await saveCategories();
+    updateCategoryTabs();
+    showToast(`Category "${name}" added successfully!`, 'success');
+    return true;
+}
+
+async function deleteCategory(categoryId) {
+    if (categoryId === 'daily') {
+        showToast('Cannot delete the default Daily Expenses category!', 'error');
+        return false;
+    }
+    
+    if (categories[categoryId]) {
+        delete categories[categoryId];
+        
+        // If current category was deleted, switch to daily
+        if (activeCategory === categoryId) {
+            switchCategory('daily');
+        }
+        
+        await saveCategories();
+        updateCategoryTabs();
+        showToast('Category deleted successfully!', 'success');
+        return true;
+    }
+    return false;
+}
+
 function saveTransactions() {
     if (!currentUserId) return;
     
-    const key = `transactions_${currentUserId}`;
-    localStorage.setItem(key, JSON.stringify(transactions));
+    // Save current category's transactions
+    categories[activeCategory].transactions = transactions;
+    
+    // Save all categories
+    const key = `categories_${currentUserId}`;
+    localStorage.setItem(key, JSON.stringify(categories));
     
     // Also save user's last activity
     localStorage.setItem(`lastActivity_${currentUserId}`, new Date().toISOString());
 }
 
+async function saveCategories() {
+    if (!currentUserId) return;
+    
+    // Save to localStorage as backup
+    const key = `categories_${currentUserId}`;
+    localStorage.setItem(key, JSON.stringify(categories));
+    console.log('💾 Categories saved to localStorage');
+    
+    // Save to Supabase backend if authenticated
+    if (currentUser && supabaseClient) {
+        try {
+            console.log('📤 Saving categories to database...');
+            
+            // Get access token
+            const authData = localStorage.getItem('expense-tracker-auth');
+            let accessToken = null;
+            
+            if (authData) {
+                try {
+                    const parsed = JSON.parse(authData);
+                    accessToken = parsed?.access_token;
+                } catch (e) {
+                    console.error('❌ Error parsing auth data:', e);
+                }
+            }
+            
+            if (!accessToken) {
+                console.log('⚠️ No access token, categories saved to localStorage only');
+                return;
+            }
+            
+            // Prepare categories data for backend
+            const categoriesData = {
+                user_id: currentUser.id,
+                categories_json: JSON.stringify(categories),
+                updated_at: new Date().toISOString()
+            };
+            
+            // Check if user categories already exist
+            const checkResponse = await fetch(`${SUPABASE_URL}/rest/v1/user_categories?user_id=eq.${currentUser.id}&select=id`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${accessToken}`
+                }
+            });
+            
+            if (!checkResponse.ok) {
+                console.error('❌ Error checking existing categories:', checkResponse.status);
+                return;
+            }
+            
+            const existing = await checkResponse.json();
+            const method = existing.length > 0 ? 'PATCH' : 'POST';
+            const url = existing.length > 0 
+                ? `${SUPABASE_URL}/rest/v1/user_categories?user_id=eq.${currentUser.id}`
+                : `${SUPABASE_URL}/rest/v1/user_categories`;
+            
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(categoriesData)
+            });
+            
+            if (response.ok) {
+                console.log('✅ Categories saved to database successfully!');
+            } else {
+                const errorText = await response.text();
+                console.error('❌ Database save failed:', response.status, errorText);
+                showToast('Failed to sync categories to cloud', 'warning');
+            }
+            
+        } catch (error) {
+            console.error('❌ Error saving categories to database:', error);
+            showToast('Error syncing categories: ' + error.message, 'warning');
+        }
+    }
+}
+
 async function loadTransactions() {
-    console.log('🔄 Loading transactions...');
+    console.log('🔄 Loading transactions and categories...');
+    
+    // First, try to load categories from backend
+    if (currentUser && supabaseClient) {
+        const categoriesLoaded = await loadCategories();
+        if (!categoriesLoaded) {
+            console.log('📂 Loading categories from localStorage as fallback...');
+        }
+    }
+    
     if (currentUser && supabaseClient) {
         // Load from Supabase database using direct fetch (faster than client)
         try {
-            console.log('📡 Loading from Supabase database for user:', currentUser.email);
+            console.log('📡 Loading transactions from Supabase database for user:', currentUser.email);
             
             // Get access token from localStorage
             const authData = localStorage.getItem('expense-tracker-auth');
@@ -2070,6 +2406,70 @@ async function loadTransactions() {
     }
 }
 
+async function loadCategories() {
+    if (!currentUser || !supabaseClient) {
+        console.log('⚠️ No user authenticated, loading categories from localStorage only');
+        return false;
+    }
+    
+    try {
+        console.log('📡 Loading categories from database...');
+        
+        // Get access token
+        const authData = localStorage.getItem('expense-tracker-auth');
+        let accessToken = null;
+        
+        if (authData) {
+            try {
+                const parsed = JSON.parse(authData);
+                accessToken = parsed?.access_token;
+            } catch (e) {
+                console.error('❌ Error parsing auth data:', e);
+            }
+        }
+        
+        if (!accessToken) {
+            console.log('⚠️ No access token, loading from localStorage');
+            return false;
+        }
+        
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/user_categories?user_id=eq.${currentUser.id}&select=*`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            console.error('❌ Error loading categories from database:', response.status);
+            return false;
+        }
+        
+        const data = await response.json();
+        
+        if (data.length > 0) {
+            const categoriesData = data[0];
+            categories = JSON.parse(categoriesData.categories_json);
+            console.log(`✅ Categories loaded from database: ${Object.keys(categories).length} categories`);
+            
+            // Save to localStorage as cache
+            const key = `categories_${currentUserId}`;
+            localStorage.setItem(key, JSON.stringify(categories));
+            
+            return true;
+        } else {
+            console.log('ℹ️ No categories found in database');
+            return false;
+        }
+        
+    } catch (error) {
+        console.error('❌ Error loading categories from database:', error);
+        return false;
+    }
+}
+
 function loadFromLocalStorage() {
     if (!currentUserId) {
         // Create a temporary user for localStorage
@@ -2077,10 +2477,29 @@ function loadFromLocalStorage() {
         localStorage.setItem('tempUserId', currentUserId);
     }
     
-    const key = `transactions_${currentUserId}`;
-    const saved = localStorage.getItem(key);
-    transactions = saved ? JSON.parse(saved) : [];
-    console.log(`Loaded ${transactions.length} transactions from localStorage`);
+    // Load categories first
+    const categoriesKey = `categories_${currentUserId}`;
+    const savedCategories = localStorage.getItem(categoriesKey);
+    
+    if (savedCategories) {
+        categories = JSON.parse(savedCategories);
+        console.log(`Loaded ${Object.keys(categories).length} categories from localStorage`);
+    } else {
+        // Check for legacy transactions
+        const legacyKey = `transactions_${currentUserId}`;
+        const legacyData = localStorage.getItem(legacyKey);
+        if (legacyData) {
+            const legacyTransactions = JSON.parse(legacyData);
+            // Migrate to daily category
+            categories['daily'].transactions = legacyTransactions;
+            saveCategories();
+            console.log(`Migrated ${legacyTransactions.length} transactions to Daily category`);
+        }
+    }
+    
+    // Set transactions to active category
+    transactions = categories[activeCategory].transactions;
+    console.log(`Loaded ${transactions.length} transactions for category: ${categories[activeCategory].name}`);
 }
 
 function clearTransactions() {
@@ -2088,12 +2507,136 @@ function clearTransactions() {
     updateUI();
 }
 
+// Category Modal Functions
+function openCategoryModal() {
+    document.getElementById('categoryModalTitle').textContent = 'Add New Category';
+    document.getElementById('categoryName').value = '';
+    document.getElementById('categorySubmitText').textContent = 'Add Category';
+    
+    // Reset icon selection
+    document.querySelectorAll('.icon-option').forEach(option => option.classList.remove('active'));
+    document.querySelector('.icon-option').classList.add('active');
+    
+    document.getElementById('categoryModal').style.display = 'flex';
+}
+
+function closeCategoryModal() {
+    document.getElementById('categoryModal').style.display = 'none';
+}
+
+function openCategoryManageModal() {
+    updateCategoryList();
+    document.getElementById('categoryManageModal').style.display = 'flex';
+}
+
+function closeCategoryManageModal() {
+    document.getElementById('categoryManageModal').style.display = 'none';
+}
+
+function updateCategoryTabs() {
+    const categoryTabs = document.querySelector('.category-tabs');
+    if (!categoryTabs) return;
+    
+    // Clear existing tabs except add button
+    const addButton = categoryTabs.querySelector('.add-category');
+    categoryTabs.innerHTML = '';
+    
+    // Add category tabs
+    Object.entries(categories).forEach(([id, category]) => {
+        const tab = document.createElement('div');
+        tab.className = `category-tab ${id === activeCategory ? 'active' : ''}`;
+        tab.setAttribute('data-category', id);
+        tab.onclick = () => switchCategory(id);
+        tab.innerHTML = `
+            <i class="${category.icon}"></i>
+            <span>${category.name}</span>
+        `;
+        categoryTabs.appendChild(tab);
+    });
+    
+    // Re-add the add button
+    if (addButton) {
+        categoryTabs.appendChild(addButton);
+    }
+}
+
+function updateCategoryList() {
+    const categoryList = document.getElementById('categoryList');
+    if (!categoryList) return;
+    
+    categoryList.innerHTML = '';
+    
+    Object.entries(categories).forEach(([id, category]) => {
+        const isDefault = id === 'daily';
+        const item = document.createElement('div');
+        item.className = 'category-item';
+        item.innerHTML = `
+            <div class="category-info">
+                <i class="${category.icon}"></i>
+                <span>${category.name}</span>
+                <small>(${category.transactions.length} transactions)</small>
+            </div>
+            <div class="category-item-actions">
+                ${!isDefault ? `
+                    <button class="category-action-btn" onclick="editCategory('${id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="category-action-btn delete" onclick="confirmDeleteCategory('${id}')" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                ` : `
+                    <span style="color: var(--text-secondary); font-size: 0.8rem;">Default</span>
+                `}
+            </div>
+        `;
+        categoryList.appendChild(item);
+    });
+}
+
+async function confirmDeleteCategory(categoryId) {
+    const category = categories[categoryId];
+    if (!category) return;
+    
+    const hasTransactions = category.transactions.length > 0;
+    const message = hasTransactions 
+        ? `Delete "${category.name}" category? This will permanently delete ${category.transactions.length} transactions.`
+        : `Delete "${category.name}" category?`;
+    
+    if (confirm(message)) {
+        await deleteCategory(categoryId);
+        updateCategoryList();
+    }
+}
+
+function editCategory(categoryId) {
+    const category = categories[categoryId];
+    if (!category) return;
+    
+    document.getElementById('categoryModalTitle').textContent = 'Edit Category';
+    document.getElementById('categoryName').value = category.name;
+    document.getElementById('categorySubmitText').textContent = 'Save Changes';
+    
+    // Set icon selection
+    document.querySelectorAll('.icon-option').forEach(option => {
+        option.classList.remove('active');
+        if (option.getAttribute('data-icon') === category.icon) {
+            option.classList.add('active');
+        }
+    });
+    
+    // Store editing category ID
+    document.getElementById('categoryForm').setAttribute('data-editing', categoryId);
+    document.getElementById('categoryModal').style.display = 'flex';
+}
+
 // UI updates
 function updateUI() {
-    console.log('🔄 Updating UI with', transactions.length, 'total transactions');
+    console.log(`🔄 Updating UI for category "${categories[activeCategory].name}" with ${transactions.length} transactions`);
+    updateCategoryTabs();
     updateSummary();
     renderTransactions();
     updateCurrentPeriodDisplay();
+    updateTransactionCount(); // Add this to ensure count is always updated
     updateComparisonChart();
 }
 
@@ -2107,16 +2650,67 @@ function updateCurrentPeriodDisplay() {
     const monthSelector = document.getElementById('monthSelector')?.value;
     const yearSelector = document.getElementById('yearSelector')?.value;
     
-    if (currentView === 'daily') {
+    // Handle 'all' view first
+    if (currentView === 'all') {
+        displayElement.textContent = 'All Transactions';
+        if (dateDetails) dateDetails.innerHTML = 'Complete transaction history<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>';
+    } else if (currentView === 'custom' && customStartDate && customEndDate) {
+        // Handle custom date ranges (including TODAY, LAST 7D, etc.)
+        if (customStartDate === customEndDate) {
+            // Single day selection
+            const selectedDate = new Date(customStartDate + 'T00:00:00');
+            const today = now.toISOString().split('T')[0];
+            const isToday = customStartDate === today;
+            
+            displayElement.textContent = isToday ? "Today's Summary" : "Daily Summary";
+            if (dateDetails) {
+                const dateStr = selectedDate.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                dateDetails.innerHTML = `${dateStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
+        } else {
+            // Date range selection
+            const startDate = new Date(customStartDate + 'T00:00:00');
+            const endDate = new Date(customEndDate + 'T00:00:00');
+            
+            displayElement.textContent = 'Custom Range';
+            if (dateDetails) {
+                const startStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const endStr = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                dateDetails.innerHTML = `${startStr} - ${endStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
+        }
+    } else if (currentView === 'daily') {
         // Show selected date or today
         if (dateSelector) {
             const selectedDate = new Date(dateSelector + 'T00:00:00');
-            const isToday = dateSelector === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            displayElement.textContent = isToday ? `Today's Summary` : `Daily Summary`;
-            if (dateDetails) dateDetails.textContent = selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const today = now.toISOString().split('T')[0];
+            const isToday = dateSelector === today;
+            displayElement.textContent = isToday ? "Today's Summary" : "Daily Summary";
+            if (dateDetails) {
+                const dateStr = selectedDate.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                dateDetails.innerHTML = `${dateStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
         } else {
-            displayElement.textContent = `Today's Summary`;
-            if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            displayElement.textContent = "Today's Summary";
+            if (dateDetails) {
+                const dateStr = now.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                dateDetails.innerHTML = `${dateStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
         }
     } else if (currentView === 'monthly') {
         // Show selected month or current month
@@ -2124,17 +2718,41 @@ function updateCurrentPeriodDisplay() {
             const selectedMonth = new Date(monthSelector + '-01');
             const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             const isCurrentMonth = monthSelector === currentMonthStr;
-            displayElement.textContent = isCurrentMonth ? `This Month's Summary` : `Monthly Summary`;
-            if (dateDetails) dateDetails.textContent = selectedMonth.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            displayElement.textContent = isCurrentMonth ? "This Month's Summary" : "Monthly Summary";
+            if (dateDetails) {
+                const monthStr = selectedMonth.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long' 
+                });
+                dateDetails.innerHTML = `${monthStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
         } else {
-            displayElement.textContent = `This Month's Summary`;
-            if (dateDetails) dateDetails.textContent = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            displayElement.textContent = "This Month's Summary";
+            if (dateDetails) {
+                const monthStr = now.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long' 
+                });
+                dateDetails.innerHTML = `${monthStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+            }
         }
     } else if (currentView === 'yearly') {
         const selectedYear = yearSelector || now.getFullYear().toString();
         const isCurrentYear = selectedYear === now.getFullYear().toString();
-        displayElement.textContent = isCurrentYear ? `This Year's Summary` : `Yearly Summary`;
-        if (dateDetails) dateDetails.textContent = `Year ${selectedYear}`;
+        displayElement.textContent = isCurrentYear ? "This Year's Summary" : "Yearly Summary";
+        if (dateDetails) dateDetails.innerHTML = `Year ${selectedYear}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+    } else {
+        // Default fallback
+        displayElement.textContent = "Today's Summary";
+        if (dateDetails) {
+            const dateStr = now.toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            dateDetails.innerHTML = `${dateStr}<span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>`;
+        }
     }
     
     // Update transaction count
@@ -2156,6 +2774,9 @@ function updateSummary() {
     const balance = totalIncome - totalExpenses;
     
     console.log('💰 Summary calculations:', { totalIncome, totalExpenses, balance });
+    
+    // Calculate averages for current period
+    const { avgIncome, avgExpense, avgBalance, dayCount } = calculateAverages(filteredTransactions);
     
     // Update labels based on current view
     const incomeLabel = document.getElementById('incomeLabel');
@@ -2204,6 +2825,66 @@ function updateSummary() {
     } else {
         console.error('❌ Balance element not found');
     }
+    
+    // Update average texts
+    const avgIncomeEl = document.getElementById('avgIncomeText');
+    const avgExpenseEl = document.getElementById('avgExpenseText');
+    const avgBalanceEl = document.getElementById('avgBalanceText');
+    
+    if (avgIncomeEl) {
+        avgIncomeEl.textContent = `Avg: ${formatCurrency(avgIncome)}/day`;
+    }
+    
+    if (avgExpenseEl) {
+        avgExpenseEl.textContent = `Avg: ${formatCurrency(avgExpense)}/day`;
+    }
+    
+    if (avgBalanceEl) {
+        avgBalanceEl.textContent = `Avg: ${formatCurrency(avgBalance)}/day`;
+    }
+    
+    // Update transaction count in header
+    updateTransactionCount();
+}
+
+// Calculate daily averages for current filtered period
+function calculateAverages(transactions) {
+    if (transactions.length === 0) {
+        return { avgIncome: 0, avgExpense: 0, avgBalance: 0, dayCount: 0 };
+    }
+    
+    // Get unique days in the filtered period
+    const uniqueDates = [...new Set(transactions.map(t => t.date))];
+    const dayCount = uniqueDates.length || 1;
+    
+    const totalIncome = transactions
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalExpenses = transactions
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+        avgIncome: totalIncome / dayCount,
+        avgExpense: totalExpenses / dayCount,
+        avgBalance: (totalIncome - totalExpenses) / dayCount,
+        dayCount
+    };
+}
+
+// Get all transactions from all categories
+function getAllTransactions() {
+    const allTransactions = [];
+    
+    // Collect from all categories
+    Object.values(categories).forEach(category => {
+        if (category.transactions && Array.isArray(category.transactions)) {
+            allTransactions.push(...category.transactions);
+        }
+    });
+    
+    return allTransactions;
 }
 
 function renderTransactions() {
@@ -2304,6 +2985,10 @@ function getFilteredTransactions() {
         } else {
             console.log('⚠️ Custom range not set, showing all transactions');
         }
+    } else if (currentView === 'all') {
+        // Show all transactions without any date filtering
+        console.log('📋 Showing all transactions (no date filter)');
+        // filtered already contains all transactions, no additional filtering needed
     }
     
     console.log('✅ Final filtered transactions:', filtered.length);
@@ -2887,65 +3572,139 @@ function updateComparisonChart() {
     
     const today = new Date();
     
-    if (currentView === 'daily') {
-        // Show last 7 days comparison
-        for (let i = 6; i >= 0; i--) {
+    // Handle precise period-based data visualization
+    const currentPeriodButton = document.querySelector('.quick-period-btn.active, .all-transactions-btn.active');
+    let periodDays = 7; // Default for daily view
+    
+    if (currentPeriodButton) {
+        const daysAttr = currentPeriodButton.getAttribute('data-days');
+        if (daysAttr) {
+            periodDays = parseInt(daysAttr);
+        } else if (currentPeriodButton.getAttribute('data-period') === 'today') {
+            periodDays = 1;
+        } else if (currentPeriodButton.getAttribute('data-period') === 'all') {
+            periodDays = null; // All time
+        }
+    }
+    
+    if (currentView === 'daily' || periodDays !== null) {
+        // Show exact period based on selected filter
+        const daysToShow = periodDays || 7;
+        
+        for (let i = daysToShow - 1; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-            labels.push(dayName);
+            
+            // Smart labeling based on period length
+            let labelText;
+            if (daysToShow === 1) {
+                labelText = 'Today';
+            } else if (daysToShow <= 7) {
+                labelText = date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+            } else if (daysToShow <= 31) {
+                labelText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            } else {
+                labelText = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            }
+            
+            labels.push(labelText);
             
             const dayTransactions = transactions.filter(t => t.date === dateStr);
-            incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
-            expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+            incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + parseFloat(t.amount) || 0, 0));
+            expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + parseFloat(t.amount) || 0, 0));
         }
         
-        // Calculate week comparisons
-        const thisWeekExpense = expenseData.reduce((a, b) => a + b, 0);
-        const thisWeekIncome = incomeData.reduce((a, b) => a + b, 0);
+        // Smart title based on period
+        if (chartTitleElement) {
+            if (daysToShow === 1) {
+                chartTitleElement.textContent = 'Today\'s Activity';
+            } else if (daysToShow === 7) {
+                chartTitleElement.textContent = 'Last 7 Days Daily Breakdown';
+            } else if (daysToShow === 30) {
+                chartTitleElement.textContent = 'Last 30 Days Daily Analysis';
+            } else if (daysToShow === 90) {
+                chartTitleElement.textContent = 'Last 3 Months Overview';
+            } else if (daysToShow === 180) {
+                chartTitleElement.textContent = 'Last 6 Months Analysis';
+            } else if (daysToShow === 365) {
+                chartTitleElement.textContent = 'Last Year Overview';
+            } else {
+                chartTitleElement.textContent = `Last ${daysToShow} Days Analysis`;
+            }
+        }
         
-        // Get last week data
-        let lastWeekExpense = 0;
-        let lastWeekIncome = 0;
-        for (let i = 7; i <= 13; i++) {
+        // Calculate period-specific comparisons
+        const currentPeriodExpense = expenseData.reduce((a, b) => a + b, 0);
+        const currentPeriodIncome = incomeData.reduce((a, b) => a + b, 0);
+        
+        // Calculate comparison period data
+        let comparisonExpense = 0;
+        let comparisonIncome = 0;
+        const comparisonStart = daysToShow;
+        const comparisonEnd = daysToShow * 2 - 1;
+        
+        for (let i = comparisonStart; i <= comparisonEnd; i++) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             const dayTx = transactions.filter(t => t.date === dateStr);
-            lastWeekExpense += dayTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-            lastWeekIncome += dayTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+            comparisonExpense += dayTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+            comparisonIncome += dayTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
         }
         
-        if (lastWeekExpense > 0) {
-            const expChange = ((thisWeekExpense - lastWeekExpense) / lastWeekExpense * 100).toFixed(0);
+        // Smart period comparisons
+        if (comparisonExpense > 0) {
+            const expChange = ((currentPeriodExpense - comparisonExpense) / comparisonExpense * 100).toFixed(0);
+            const periodName = daysToShow === 1 ? 'yesterday' : 
+                              daysToShow === 7 ? 'previous week' :
+                              daysToShow === 30 ? 'previous month' :
+                              daysToShow === 90 ? 'previous 3 months' :
+                              `previous ${daysToShow} days`;
+            
             comparisonBadges.push({
-                type: thisWeekExpense > lastWeekExpense ? 'up' : 'down',
-                icon: thisWeekExpense > lastWeekExpense ? 'fa-arrow-up' : 'fa-arrow-down',
-                text: `${Math.abs(expChange)}% ${thisWeekExpense > lastWeekExpense ? 'more' : 'less'} expenses vs last week`
+                type: currentPeriodExpense > comparisonExpense ? 'up' : 'down',
+                icon: currentPeriodExpense > comparisonExpense ? 'fa-arrow-up' : 'fa-arrow-down',
+                text: `${Math.abs(expChange)}% ${currentPeriodExpense > comparisonExpense ? 'more' : 'less'} expenses vs ${periodName}`
             });
         }
         
-        if (lastWeekIncome > 0) {
-            const incChange = ((thisWeekIncome - lastWeekIncome) / lastWeekIncome * 100).toFixed(0);
+        if (comparisonIncome > 0) {
+            const incChange = ((currentPeriodIncome - comparisonIncome) / comparisonIncome * 100).toFixed(0);
+            const periodName = daysToShow === 1 ? 'yesterday' : 
+                              daysToShow === 7 ? 'previous week' :
+                              daysToShow === 30 ? 'previous month' :
+                              daysToShow === 90 ? 'previous 3 months' :
+                              `previous ${daysToShow} days`;
+            
             comparisonBadges.push({
-                type: thisWeekIncome > lastWeekIncome ? 'down' : 'up',
-                icon: thisWeekIncome > lastWeekIncome ? 'fa-arrow-up' : 'fa-arrow-down',
-                text: `${Math.abs(incChange)}% ${thisWeekIncome > lastWeekIncome ? 'more' : 'less'} income vs last week`
+                type: currentPeriodIncome > comparisonIncome ? 'down' : 'up',
+                icon: currentPeriodIncome > comparisonIncome ? 'fa-arrow-up' : 'fa-arrow-down',
+                text: `${Math.abs(incChange)}% ${currentPeriodIncome > comparisonIncome ? 'more' : 'less'} income vs ${periodName}`
             });
         }
         
-        // Find highest expense day
+        // Find peak activity day/period
         const maxExpenseIdx = expenseData.indexOf(Math.max(...expenseData));
         if (expenseData[maxExpenseIdx] > 0) {
             comparisonBadges.push({
                 type: 'highlight',
                 icon: 'fa-fire',
-                text: `${labels[maxExpenseIdx]} was your highest spending day`
+                text: `${labels[maxExpenseIdx]} was your peak spending period (₹${expenseData[maxExpenseIdx].toLocaleString('en-IN')})`
             });
         }
         
-        if (chartTitleElement) chartTitleElement.textContent = 'Last 7 Days Comparison';
+        // Daily average insights
+        if (daysToShow > 1) {
+            const dailyAvgExpense = currentPeriodExpense / daysToShow;
+            if (dailyAvgExpense > 0) {
+                comparisonBadges.push({
+                    type: 'neutral',
+                    icon: 'fa-calculator',
+                    text: `Daily average expense: ₹${Math.round(dailyAvgExpense).toLocaleString('en-IN')}`
+                });
+            }
+        }
         
     } else if (currentView === 'monthly') {
         // Show last 6 months comparison
@@ -2956,8 +3715,8 @@ function updateComparisonChart() {
             labels.push(monthName);
             
             const monthTransactions = transactions.filter(t => t.date && t.date.startsWith(monthStr));
-            incomeData.push(monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
-            expenseData.push(monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+            incomeData.push(monthTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + parseFloat(t.amount) || 0, 0));
+            expenseData.push(monthTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + parseFloat(t.amount) || 0, 0));
         }
         
         // Find highest expense month
@@ -3034,6 +3793,125 @@ function updateComparisonChart() {
         }
         
         if (chartTitleElement) chartTitleElement.textContent = 'Last 5 Years Comparison';
+        
+    } else if (currentView === 'all' || (currentView === 'custom' && !customStartDate && !customEndDate)) {
+        // Show all-time monthly summary for 'all' view
+        const monthlyData = {};
+        
+        // Group transactions by month
+        transactions.forEach(t => {
+            if (t.date) {
+                const monthKey = t.date.substring(0, 7); // YYYY-MM
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = { income: 0, expense: 0 };
+                }
+                monthlyData[monthKey][t.type] += parseFloat(t.amount) || 0;
+            }
+        });
+        
+        // Get last 6 months or all available months (whichever is less)
+        const sortedMonths = Object.keys(monthlyData).sort();
+        const lastMonths = sortedMonths.slice(-6); // Show last 6 months of data
+        
+        lastMonths.forEach(monthKey => {
+            const date = new Date(monthKey + '-01');
+            const monthName = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+            labels.push(monthName);
+            incomeData.push(monthlyData[monthKey].income);
+            expenseData.push(monthlyData[monthKey].expense);
+        });
+        
+        // Calculate total insights
+        const totalIncome = incomeData.reduce((a, b) => a + b, 0);
+        const totalExpense = expenseData.reduce((a, b) => a + b, 0);
+        const totalSavings = totalIncome - totalExpense;
+        
+        if (totalSavings > 0) {
+            comparisonBadges.push({
+                type: 'down',
+                icon: 'fa-piggy-bank',
+                text: `Total savings: ₹${totalSavings.toLocaleString('en-IN')}`
+            });
+        }
+        
+        // Find best month
+        const savings = incomeData.map((inc, i) => inc - expenseData[i]);
+        const bestMonthIdx = savings.indexOf(Math.max(...savings));
+        if (savings[bestMonthIdx] > 0) {
+            comparisonBadges.push({
+                type: 'neutral',
+                icon: 'fa-trophy',
+                text: `${labels[bestMonthIdx]} was your best month (₹${savings[bestMonthIdx].toLocaleString('en-IN')} saved)`
+            });
+        }
+        
+        // Average monthly expense - fix calculation to count only actual data months
+        const monthsWithData = expenseData.filter(amount => amount > 0).length;
+        const avgExpense = monthsWithData > 0 ? totalExpense / monthsWithData : 0;
+        if (avgExpense > 0) {
+            comparisonBadges.push({
+                type: 'highlight',
+                icon: 'fa-calculator',
+                text: `Average monthly expense: ₹${Math.round(avgExpense).toLocaleString('en-IN')} (${monthsWithData} months)`
+            });
+        }
+        
+        if (chartTitleElement) chartTitleElement.textContent = 'All-Time Summary (Last 6 Months)';
+        
+    } else if (currentView === 'custom' && customStartDate && customEndDate) {
+        // Handle custom date ranges
+        const startDate = new Date(customStartDate + 'T00:00:00');
+        const endDate = new Date(customEndDate + 'T00:00:00');
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (daysDiff <= 7) {
+            // Show daily data for short ranges
+            for (let i = 0; i < daysDiff; i++) {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + i);
+                const dateStr = date.toISOString().split('T')[0];
+                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+                labels.push(dayName);
+                
+                const dayTransactions = transactions.filter(t => t.date === dateStr);
+                incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
+                expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
+            }
+            if (chartTitleElement) chartTitleElement.textContent = 'Custom Range (Daily)';
+        } else {
+            // Group by month for longer ranges
+            const monthlyData = {};
+            transactions.forEach(t => {
+                if (t.date && t.date >= customStartDate && t.date <= customEndDate) {
+                    const monthKey = t.date.substring(0, 7);
+                    if (!monthlyData[monthKey]) {
+                        monthlyData[monthKey] = { income: 0, expense: 0 };
+                    }
+                    monthlyData[monthKey][t.type] += parseFloat(t.amount) || 0;
+                }
+            });
+            
+            Object.keys(monthlyData).sort().forEach(monthKey => {
+                const date = new Date(monthKey + '-01');
+                const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+                labels.push(monthName);
+                incomeData.push(monthlyData[monthKey].income);
+                expenseData.push(monthlyData[monthKey].expense);
+            });
+            if (chartTitleElement) chartTitleElement.textContent = 'Custom Range (Monthly)';
+        }
+        
+        // Add custom range insights
+        const totalIncome = incomeData.reduce((a, b) => a + b, 0);
+        const totalExpense = expenseData.reduce((a, b) => a + b, 0);
+        
+        if (totalIncome > totalExpense) {
+            comparisonBadges.push({
+                type: 'down',
+                icon: 'fa-thumbs-up',
+                text: `You saved ₹${(totalIncome - totalExpense).toLocaleString('en-IN')} in this period!`
+            });
+        }
     } else if (currentView === 'custom' && customStartDate && customEndDate) {
         // Show custom range - group by appropriate interval
         const startDate = new Date(customStartDate + 'T00:00:00');
@@ -3288,4 +4166,198 @@ function updateComparisonChart() {
     
     // Update insights when chart updates
     updateInsights();
+}
+
+// Mobile optimization functions
+function initializeMobileOptimizations() {
+    // Prevent zoom on input focus for iOS
+    if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+        const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"], input[type="number"]');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                this.style.fontSize = '16px';
+            });
+            input.addEventListener('blur', function() {
+                this.style.fontSize = '';
+            });
+        });
+    }
+    
+    // Add touch-friendly classes
+    document.body.classList.add('touch-optimized');
+    
+    // Enhanced scroll performance for transaction list
+    const transactionsList = document.querySelector('.transactions-scroll-container');
+    if (transactionsList) {
+        transactionsList.style.webkitOverflowScrolling = 'touch';
+        transactionsList.style.overflowScrolling = 'touch';
+    }
+    
+    // Add pull-to-refresh hint for mobile
+    if ('ontouchstart' in window) {
+        addPullToRefreshHint();
+    }
+    
+    // Optimize chart rendering for mobile
+    optimizeChartsForMobile();
+    
+    // Add swipe gestures for navigation
+    addSwipeGestures();
+}
+
+function addPullToRefreshHint() {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        let startY = 0;
+        let currentY = 0;
+        
+        mainContent.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        mainContent.addEventListener('touchmove', (e) => {
+            currentY = e.touches[0].clientY;
+            if (currentY - startY > 100 && window.scrollY === 0) {
+                // Show pull to refresh hint
+                if (!document.querySelector('.pull-refresh-hint')) {
+                    const hint = document.createElement('div');
+                    hint.className = 'pull-refresh-hint';
+                    hint.innerHTML = '<i class="fas fa-sync-alt"></i> Release to refresh';
+                    hint.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: var(--primary-color);
+                        color: white;
+                        padding: 0.5rem 1rem;
+                        border-radius: 20px;
+                        font-size: 0.8rem;
+                        z-index: 1000;
+                        animation: slideDown 0.3s ease;
+                    `;
+                    document.body.appendChild(hint);
+                }
+            }
+        }, { passive: true });
+        
+        mainContent.addEventListener('touchend', () => {
+            const hint = document.querySelector('.pull-refresh-hint');
+            if (hint && currentY - startY > 100 && window.scrollY === 0) {
+                // Trigger refresh
+                updateUI();
+                hint.remove();
+                showToast('Data refreshed!', 'success');
+            } else if (hint) {
+                hint.remove();
+            }
+        }, { passive: true });
+    }
+}
+
+function optimizeChartsForMobile() {
+    // Add responsive chart options
+    const isMobile = window.innerWidth <= 768;
+    
+    if (window.expenseChart) {
+        window.expenseChart.options.responsive = true;
+        window.expenseChart.options.maintainAspectRatio = false;
+        
+        if (isMobile) {
+            window.expenseChart.options.plugins.legend.display = false;
+            window.expenseChart.options.scales.x.ticks.maxTicksLimit = 5;
+            window.expenseChart.options.scales.y.ticks.maxTicksLimit = 5;
+        }
+        
+        window.expenseChart.update();
+    }
+}
+
+function addSwipeGestures() {
+    const categoryTabs = document.querySelector('.category-tabs');
+    if (!categoryTabs || !('ontouchstart' in window)) return;
+    
+    let startX = 0;
+    let startY = 0;
+    let isSwipeGesture = false;
+    
+    categoryTabs.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isSwipeGesture = true;
+    }, { passive: true });
+    
+    categoryTabs.addEventListener('touchmove', (e) => {
+        if (!isSwipeGesture) return;
+        
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        const diffX = Math.abs(currentX - startX);
+        const diffY = Math.abs(currentY - startY);
+        
+        // If vertical scroll is detected, disable swipe
+        if (diffY > diffX) {
+            isSwipeGesture = false;
+        }
+    }, { passive: true });
+    
+    categoryTabs.addEventListener('touchend', (e) => {
+        if (!isSwipeGesture) return;
+        
+        const endX = e.changedTouches[0].clientX;
+        const diffX = startX - endX;
+        
+        if (Math.abs(diffX) > 50) { // Minimum swipe distance
+            if (diffX > 0) {
+                // Swipe left - next category
+                switchToNextCategory();
+            } else {
+                // Swipe right - previous category  
+                switchToPreviousCategory();
+            }
+        }
+        
+        isSwipeGesture = false;
+    }, { passive: true });
+}
+
+function switchToNextCategory() {
+    const categoryKeys = Object.keys(categories);
+    const currentIndex = categoryKeys.indexOf(activeCategory);
+    const nextIndex = (currentIndex + 1) % categoryKeys.length;
+    const nextCategory = categoryKeys[nextIndex];
+    
+    if (nextCategory && nextCategory !== activeCategory) {
+        switchCategory(nextCategory);
+    }
+}
+
+function switchToPreviousCategory() {
+    const categoryKeys = Object.keys(categories);
+    const currentIndex = categoryKeys.indexOf(activeCategory);
+    const prevIndex = currentIndex === 0 ? categoryKeys.length - 1 : currentIndex - 1;
+    const prevCategory = categoryKeys[prevIndex];
+    
+    if (prevCategory && prevCategory !== activeCategory) {
+        switchCategory(prevCategory);
+    }
+}
+
+// Window resize handler for responsive updates
+window.addEventListener('resize', debounce(() => {
+    optimizeChartsForMobile();
+    updateUI();
+}, 250));
+
+// Debounce function for performance
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }

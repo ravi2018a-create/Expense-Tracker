@@ -2,10 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Track your daily, monthly, and yearly expenses with beautiful charts and Google Drive sync">
     <meta name="keywords" content="expense tracker, budget, finance, money management">
     <meta name="author" content="Expense Tracker App">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
     <title>Expense Tracker - Daily, Monthly, Yearly</title>
     
     <!-- Favicon -->
@@ -41,7 +45,7 @@
                     <div class="user-section">
                         <button id="authButton" class="sign-in-btn" onclick="openAuthModal()">
                             <i class="fas fa-database"></i>
-                            Sign In for Database
+                            <span>Sign In for Database</span>
                         </button>
                         <div id="userInfo" class="user-info" style="display: none;">
                             <span id="userEmail"></span>
@@ -65,8 +69,11 @@
                     <i class="fas fa-chevron-left"></i>
                 </button>
                 <div class="period-center">
-                    <h3 id="currentPeriodDisplay">Today's Summary</h3>
-                    <p id="currentDateDetails" class="date-details">Sunday, January 5, 2026</p>
+                    <h3 id="currentPeriodDisplay">All Transactions</h3>
+                    <p id="currentDateDetails" class="date-details">
+                        Complete transaction history
+                        <span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>
+                    </p>
                     <div class="period-inputs">
                         <input type="date" id="dateSelector" class="period-input-hidden">
                         <input type="month" id="monthSelector" class="period-input-hidden">
@@ -79,10 +86,13 @@
             </div>
             <div class="period-footer">
                 <div class="period-footer-left">
-                    <span id="transactionCount" class="transaction-badge">0 transactions</span>
-                    <button class="today-btn-small" id="goToToday" title="Go to Today">
-                        <i class="fas fa-redo"></i> Today
-                    </button>
+                    <div class="all-transactions-section">
+                        <button class="all-transactions-btn active" data-period="all" title="Show All Transactions">
+                            <i class="fas fa-list"></i>
+                            <span>ALL</span>
+                        </button>
+                    </div>
+                    <button class="quick-period-btn today-mobile" data-period="today" title="Today">TODAY</button>
                 </div>
                 <div class="quick-period-buttons">
                     <button class="quick-period-btn" data-days="7" title="Last 7 Days">LAST 7D</button>
@@ -93,6 +103,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- Category Tabs -->
+        <section class="category-section">
+            <div class="category-container">
+                <div class="category-tabs">
+                    <div class="category-tab active" data-category="daily" onclick="switchCategory('daily')">
+                        <i class="fas fa-calendar-day"></i>
+                        <span>Daily Expenses</span>
+                    </div>
+                    <div class="category-tab add-category" onclick="openCategoryModal()">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Category</span>
+                    </div>
+                </div>
+                <div class="category-actions">
+                    <button class="category-manage-btn" onclick="openCategoryManageModal()" title="Manage Categories">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -143,35 +174,43 @@
                 </div>
             </div>
 
-            <!-- Summary Cards -->
+            <!-- Enhanced Summary Cards with Analytics -->
             <div class="summary-section">
-                <div class="summary-card">
-                    <div class="summary-icon income">
-                        <i class="fas fa-arrow-up"></i>
+                <!-- Primary Summary Row -->
+                <div class="summary-row">
+                    <div class="summary-card">
+                        <div class="summary-icon income">
+                            <i class="fas fa-arrow-up"></i>
+                        </div>
+                        <div class="summary-content">
+                            <h3 id="incomeLabel">Total Income</h3>
+                            <span id="totalIncome">₹0.00</span>
+                            <small id="avgIncomeText" class="summary-subtitle">Avg: ₹0.00/day</small>
+                        </div>
                     </div>
-                    <div class="summary-content">
-                        <h3 id="incomeLabel">Total Income</h3>
-                        <span id="totalIncome">₹0.00</span>
+                    <div class="summary-card">
+                        <div class="summary-icon expense">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                        <div class="summary-content">
+                            <h3 id="expenseLabel">Total Expenses</h3>
+                            <span id="totalExpenses">₹0.00</span>
+                            <small id="avgExpenseText" class="summary-subtitle">Avg: ₹0.00/day</small>
+                        </div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-icon balance">
+                            <i class="fas fa-balance-scale"></i>
+                        </div>
+                        <div class="summary-content">
+                            <h3 id="balanceLabel">Balance</h3>
+                            <span id="balance">₹0.00</span>
+                            <small id="avgBalanceText" class="summary-subtitle">Avg: ₹0.00/day</small>
+                        </div>
                     </div>
                 </div>
-                <div class="summary-card">
-                    <div class="summary-icon expense">
-                        <i class="fas fa-arrow-down"></i>
-                    </div>
-                    <div class="summary-content">
-                        <h3 id="expenseLabel">Total Expenses</h3>
-                        <span id="totalExpenses">₹0.00</span>
-                    </div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-icon balance">
-                        <i class="fas fa-balance-scale"></i>
-                    </div>
-                    <div class="summary-content">
-                        <h3 id="balanceLabel">Balance</h3>
-                        <span id="balance">₹0.00</span>
-                    </div>
-                </div>
+                
+
             </div>
 
 
@@ -217,7 +256,7 @@
                     <div class="sync-status">
                         <span id="syncStatus" class="sync-indicator">
                             <i class="fas fa-sync-alt"></i>
-                            Synced
+                            <span class="sync-text">Synced</span>
                         </span>
                     </div>
                 </div>
@@ -380,6 +419,74 @@
                     <button type="submit" class="save-btn">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Category Management Modal -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="categoryModalTitle">Add New Category</h3>
+                <button class="close-modal" onclick="closeCategoryModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="categoryForm">
+                <div class="form-group">
+                    <label for="categoryName">Category Name</label>
+                    <input type="text" id="categoryName" required placeholder="Enter category name...">
+                </div>
+                <div class="form-group">
+                    <label for="categoryIcon">Icon</label>
+                    <div class="icon-selector">
+                        <button type="button" class="icon-option active" data-icon="fas fa-wallet">
+                            <i class="fas fa-wallet"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-car">
+                            <i class="fas fa-car"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-home">
+                            <i class="fas fa-home"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-shopping-cart">
+                            <i class="fas fa-shopping-cart"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-utensils">
+                            <i class="fas fa-utensils"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-plane">
+                            <i class="fas fa-plane"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-heart">
+                            <i class="fas fa-heart"></i>
+                        </button>
+                        <button type="button" class="icon-option" data-icon="fas fa-graduation-cap">
+                            <i class="fas fa-graduation-cap"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="closeCategoryModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">
+                        <span id="categorySubmitText">Add Category</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Category Management Panel -->
+    <div id="categoryManageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Manage Categories</h3>
+                <button class="close-modal" onclick="closeCategoryManageModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="category-list" id="categoryList">
+                <!-- Category items will be populated here -->
+            </div>
         </div>
     </div>
 

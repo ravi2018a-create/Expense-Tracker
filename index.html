@@ -213,6 +213,31 @@
 
             </div>
 
+            <!-- Category-wise Breakdown -->
+            <div class="category-breakdown-section" id="categoryBreakdownSection">
+                <div class="category-breakdown-header">
+                    <h3 class="category-breakdown-title">
+                        <i class="fas fa-th-large"></i>
+                        <span>Category Breakdown</span>
+                    </h3>
+                    <div class="breakdown-toggle-tabs">
+                        <button class="breakdown-tab active" data-breakdown="expense" onclick="switchBreakdownTab('expense')">
+                            <i class="fas fa-arrow-down"></i> Expenses
+                        </button>
+                        <button class="breakdown-tab" data-breakdown="income" onclick="switchBreakdownTab('income')">
+                            <i class="fas fa-arrow-up"></i> Income
+                        </button>
+                    </div>
+                </div>
+                <div class="category-breakdown-body" id="categoryBreakdownBody">
+                    <!-- Populated by JS -->
+                    <div class="breakdown-empty">
+                        <i class="fas fa-chart-pie"></i>
+                        <p>No transactions to show</p>
+                    </div>
+                </div>
+            </div>
+
 
 
             <!-- Add Transaction Form -->
@@ -233,6 +258,12 @@
                             <select id="type" required>
                                 <option value="expense">Expense</option>
                                 <option value="income">Income</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="txnCategory">Category</label>
+                            <select id="txnCategory" required>
+                                <!-- Populated dynamically by JS based on type -->
                             </select>
                         </div>
                         <div class="form-group">
@@ -407,6 +438,12 @@
                         <select id="editType" required>
                             <option value="expense">Expense</option>
                             <option value="income">Income</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editTxnCategory">Category</label>
+                        <select id="editTxnCategory" required>
+                            <!-- Populated dynamically by JS based on type -->
                         </select>
                     </div>
                     <div class="form-group">

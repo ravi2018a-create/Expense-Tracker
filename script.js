@@ -76,6 +76,129 @@ let chartDataVisibility = {
     expense: true
 };
 
+// Transaction Category Labels & Icons Map
+const txnCategoryMap = {
+    // Expense categories
+    food: { label: 'Food & Dining', icon: '🍔' },
+    travel: { label: 'Travel', icon: '✈️' },
+    transport: { label: 'Transport', icon: '🚗' },
+    shopping: { label: 'Shopping', icon: '🛒' },
+    groceries: { label: 'Groceries', icon: '🥦' },
+    rent: { label: 'Rent & Housing', icon: '🏠' },
+    utilities: { label: 'Utilities & Bills', icon: '💡' },
+    health: { label: 'Health & Medical', icon: '💊' },
+    education: { label: 'Education', icon: '📚' },
+    entertainment: { label: 'Entertainment', icon: '🎬' },
+    clothing: { label: 'Clothing', icon: '👕' },
+    personal: { label: 'Personal Care', icon: '💇' },
+    subscriptions: { label: 'Subscriptions', icon: '📱' },
+    insurance: { label: 'Insurance', icon: '🛡️' },
+    gifts: { label: 'Gifts & Donations', icon: '🎁' },
+    pets: { label: 'Pets', icon: '🐾' },
+    other_expense: { label: 'Other Expense', icon: '📦' },
+    // Income categories
+    salary: { label: 'Salary', icon: '💰' },
+    freelance: { label: 'Freelance', icon: '💻' },
+    business: { label: 'Business', icon: '📈' },
+    investments: { label: 'Investments', icon: '📊' },
+    rental_income: { label: 'Rental Income', icon: '🏘️' },
+    refund: { label: 'Refund', icon: '💸' },
+    other_income: { label: 'Other Income', icon: '🪙' },
+    // Legacy fallbacks
+    expense: { label: 'Expense', icon: '⬇️' },
+    income: { label: 'Income', icon: '⬆️' }
+};
+
+function getCategoryLabel(category) {
+    return txnCategoryMap[category]?.label || category || 'Uncategorized';
+}
+
+function getCategoryIcon(category) {
+    return txnCategoryMap[category]?.icon || (category === 'income' ? '⬆️' : '⬇️');
+}
+
+// Expense & Income category definitions
+const expenseCategories = [
+    { value: 'food', label: '🍔 Food & Dining' },
+    { value: 'travel', label: '✈️ Travel' },
+    { value: 'transport', label: '🚗 Transport' },
+    { value: 'shopping', label: '🛒 Shopping' },
+    { value: 'groceries', label: '🥦 Groceries' },
+    { value: 'rent', label: '🏠 Rent & Housing' },
+    { value: 'utilities', label: '💡 Utilities & Bills' },
+    { value: 'health', label: '💊 Health & Medical' },
+    { value: 'education', label: '📚 Education' },
+    { value: 'entertainment', label: '🎬 Entertainment' },
+    { value: 'clothing', label: '👕 Clothing' },
+    { value: 'personal', label: '💇 Personal Care' },
+    { value: 'subscriptions', label: '📱 Subscriptions' },
+    { value: 'insurance', label: '🛡️ Insurance' },
+    { value: 'gifts', label: '🎁 Gifts & Donations' },
+    { value: 'pets', label: '🐾 Pets' },
+    { value: 'other_expense', label: '📦 Other Expense' }
+];
+
+const incomeCategories = [
+    { value: 'salary', label: '💰 Salary' },
+    { value: 'freelance', label: '💻 Freelance' },
+    { value: 'business', label: '📈 Business' },
+    { value: 'investments', label: '📊 Investments' },
+    { value: 'rental_income', label: '🏘️ Rental Income' },
+    { value: 'refund', label: '💸 Refund' },
+    { value: 'other_income', label: '🪙 Other Income' }
+];
+
+// Populate category select based on type
+function populateCategorySelect(selectId, type, preserveValue) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    const cats = type === 'income' ? incomeCategories : expenseCategories;
+    const oldValue = preserveValue || select.value;
+    
+    select.innerHTML = '';
+    cats.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.value;
+        option.textContent = cat.label;
+        select.appendChild(option);
+    });
+    
+    // Apply theme class
+    select.classList.remove('cat-expense-theme', 'cat-income-theme');
+    select.classList.add(type === 'income' ? 'cat-income-theme' : 'cat-expense-theme');
+    
+    // Try to restore previous value if it exists in new list
+    const hasOldValue = cats.some(c => c.value === oldValue);
+    if (hasOldValue) {
+        select.value = oldValue;
+    }
+}
+
+// Auto-switch category options based on type selection
+function setupCategoryTypeSync() {
+    const typeSelect = document.getElementById('type');
+    const catSelect = document.getElementById('txnCategory');
+    if (typeSelect && catSelect) {
+        // Populate on load
+        populateCategorySelect('txnCategory', typeSelect.value);
+        // Re-populate on type change
+        typeSelect.addEventListener('change', () => {
+            populateCategorySelect('txnCategory', typeSelect.value);
+        });
+    }
+    const editTypeSelect = document.getElementById('editType');
+    const editCatSelect = document.getElementById('editTxnCategory');
+    if (editTypeSelect && editCatSelect) {
+        // Populate on load
+        populateCategorySelect('editTxnCategory', editTypeSelect.value);
+        // Re-populate on type change
+        editTypeSelect.addEventListener('change', () => {
+            populateCategorySelect('editTxnCategory', editTypeSelect.value);
+        });
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', async function() {
     // Initialize theme immediately from localStorage for instant loading
@@ -1185,6 +1308,9 @@ function setupEventListeners() {
         });
     }
     
+    // Setup category-type sync for transaction forms
+    setupCategoryTypeSync();
+    
     // Icon selector
     const iconOptions = document.querySelectorAll('.icon-option');
     iconOptions.forEach(option => {
@@ -1665,9 +1791,10 @@ async function handleAddTransaction(e) {
     const amount = parseFloat(document.getElementById('amount').value);
     const type = document.getElementById('type').value;
     const dateInput = document.getElementById('date').value;
+    const txnCategory = document.getElementById('txnCategory')?.value || type;
     
-    // Use type as category (expense or income)
-    const category = type;
+    // Use the selected transaction category
+    const category = txnCategory;
     
     // Ensure date is in YYYY-MM-DD format
     let date = dateInput;
@@ -1824,10 +1951,9 @@ async function handleAddTransaction(e) {
         e.target.reset();
         setCurrentDate();
         
-        // Reset category options back to expense and hide custom income source
-        updateCategoryOptions('type', 'category', 'customIncomeSourceGroup');
-        document.getElementById('customIncomeSource').value = '';
-        document.getElementById('customIncomeSourceGroup').style.display = 'none';
+        // Reset category dropdown to default
+        const txnCatSelect = document.getElementById('txnCategory');
+        if (txnCatSelect) txnCatSelect.value = 'food';
         
         console.log('✅ Transaction processing complete');
     } else {
@@ -1872,6 +1998,9 @@ function editTransaction(id) {
     document.getElementById('editType').value = transaction.type;
     document.getElementById('editDate').value = transaction.date;
     
+    // Populate category dropdown based on type, then set value
+    populateCategorySelect('editTxnCategory', transaction.type, transaction.category || transaction.type);
+    
     // Show modal
     document.getElementById('editModal').style.display = 'flex';
     document.getElementById('editModal').classList.add('fade-in');
@@ -1884,8 +2013,9 @@ async function handleEditTransaction(e) {
     const existingTransaction = transactions.find(t => t.id === id);
     
     const type = document.getElementById('editType').value;
-    // Use type as category
-    const category = type;
+    const txnCategory = document.getElementById('editTxnCategory')?.value || type;
+    // Use selected transaction category
+    const category = txnCategory;
     
     const updatedTransaction = {
         id: id,
@@ -2636,8 +2766,133 @@ function updateUI() {
     updateSummary();
     renderTransactions();
     updateCurrentPeriodDisplay();
-    updateTransactionCount(); // Add this to ensure count is always updated
+    updateTransactionCount();
     updateComparisonChart();
+    updateCategoryBreakdown();
+}
+
+// Category Breakdown Feature
+let activeBreakdownTab = 'expense';
+
+function switchBreakdownTab(type) {
+    activeBreakdownTab = type;
+    document.querySelectorAll('.breakdown-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.getAttribute('data-breakdown') === type);
+    });
+    updateCategoryBreakdown();
+}
+
+function updateCategoryBreakdown() {
+    const container = document.getElementById('categoryBreakdownBody');
+    if (!container) return;
+
+    const filtered = getFilteredTransactions();
+    const typeTxns = filtered.filter(t => t.type === activeBreakdownTab);
+
+    if (typeTxns.length === 0) {
+        container.innerHTML = `
+            <div class="breakdown-empty">
+                <i class="fas fa-chart-pie"></i>
+                <p>No ${activeBreakdownTab === 'expense' ? 'expenses' : 'income'} in this period</p>
+            </div>`;
+        return;
+    }
+
+    // Smart category detection for old transactions
+    const categoryKeywords = {
+        food: ['food','lunch','dinner','breakfast','snack','meal','restaurant','zomato','swiggy','pizza','burger','biryani','tea','coffee','chai'],
+        travel: ['travel','trip','flight','hotel','booking','vacation','holiday','oyo','makemytrip'],
+        transport: ['uber','ola','auto','cab','petrol','diesel','fuel','bus','metro','train','parking','toll'],
+        shopping: ['amazon','flipkart','shopping','online','myntra','meesho','buy','purchase','shop'],
+        groceries: ['grocery','vegetables','fruits','milk','blinkit','bigbasket','zepto','instamart','provisions','rice','wheat','atta','oil','dmart'],
+        rent: ['rent','house','flat','apartment','society','maintenance','pg'],
+        utilities: ['electricity','water','gas','bill','wifi','internet','broadband','recharge','mobile','phone','jio','airtel','vi'],
+        health: ['doctor','hospital','medicine','pharmacy','medical','health','gym','lab','test','apollo','1mg'],
+        education: ['school','college','course','tuition','book','fee','education','class','udemy','learn'],
+        entertainment: ['movie','netflix','hotstar','prime','spotify','youtube','game','play','subscription','fun','party'],
+        clothing: ['cloth','dress','shirt','shoe','wear','fashion','garment','jeans'],
+        personal: ['salon','spa','haircut','grooming','beauty','cosmetic','perfume'],
+        subscriptions: ['subscription','premium','membership','monthly','annual','plan'],
+        insurance: ['insurance','lic','policy','premium','cover','health insurance'],
+        gifts: ['gift','donation','charity','present','wedding','birthday'],
+        pets: ['pet','dog','cat','vet','animal'],
+        salary: ['salary','wages','pay','payroll','ctc'],
+        freelance: ['freelance','project','gig','client','consulting','contract'],
+        business: ['business','profit','revenue','sales','commission'],
+        investments: ['invest','dividend','interest','return','mutual fund','stock','sip','fd','fixed deposit'],
+        rental_income: ['rental income','rent received','tenant'],
+        refund: ['refund','cashback','return','reversal']
+    };
+
+    function detectCategory(transaction) {
+        const cat = transaction.category;
+        // Already has a proper category (not just 'expense'/'income')
+        if (cat && cat !== 'expense' && cat !== 'income') return cat;
+        
+        // Try to detect from description
+        const desc = (transaction.description || '').toLowerCase();
+        for (const [key, keywords] of Object.entries(categoryKeywords)) {
+            if (keywords.some(kw => desc.includes(kw))) return key;
+        }
+        // Fallback
+        return transaction.type === 'income' ? 'other_income' : 'other_expense';
+    }
+
+    // Group by detected category
+    const catTotals = {};
+    typeTxns.forEach(t => {
+        const cat = detectCategory(t);
+        if (!catTotals[cat]) catTotals[cat] = { total: 0, count: 0, transactions: [] };
+        catTotals[cat].total += t.amount;
+        catTotals[cat].count++;
+        catTotals[cat].transactions.push(t);
+    });
+
+    const grandTotal = typeTxns.reduce((s, t) => s + t.amount, 0);
+
+    // Sort by total descending
+    const sorted = Object.entries(catTotals).sort((a, b) => b[1].total - a[1].total);
+
+    // Color palette
+    const expenseColors = ['#ef4444','#f97316','#f59e0b','#eab308','#ec4899','#e11d48','#d946ef','#c026d3','#a855f7','#8b5cf6','#f43f5e','#fb923c','#fbbf24','#a3e635','#f87171','#fb7185','#c084fc'];
+    const incomeColors = ['#22c55e','#10b981','#14b8a6','#06b6d4','#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#059669','#0d9488','#0891b2','#2563eb','#4f46e5'];
+    const colors = activeBreakdownTab === 'expense' ? expenseColors : incomeColors;
+
+    container.innerHTML = sorted.map(([cat, data], i) => {
+        const pct = grandTotal > 0 ? ((data.total / grandTotal) * 100).toFixed(1) : 0;
+        const icon = getCategoryIcon(cat);
+        const label = getCategoryLabel(cat);
+        const color = colors[i % colors.length];
+        const themeClass = activeBreakdownTab === 'expense' ? 'bd-expense' : 'bd-income';
+        // Show top transaction descriptions as preview
+        const topItems = data.transactions
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 3)
+            .map(t => t.description)
+            .join(', ');
+        return `
+        <div class="breakdown-item ${themeClass}" style="--bar-color: ${color}">
+            <div class="breakdown-item-header">
+                <div class="breakdown-cat-info">
+                    <span class="breakdown-icon">${icon}</span>
+                    <span class="breakdown-name">${label}</span>
+                    <span class="breakdown-count">${data.count} txn${data.count > 1 ? 's' : ''}</span>
+                </div>
+                <div class="breakdown-amount">${formatCurrency(data.total)}</div>
+            </div>
+            <div class="breakdown-bar-track">
+                <div class="breakdown-bar-fill" style="width: ${pct}%; background: ${color}"></div>
+            </div>
+            <div class="breakdown-footer">
+                <span class="breakdown-preview" title="${topItems}">${topItems}</span>
+                <span class="breakdown-pct">${pct}%</span>
+            </div>
+        </div>`;
+    }).join('') + `
+    <div class="breakdown-total-row">
+        <span class="breakdown-total-label">Total ${activeBreakdownTab === 'expense' ? 'Expenses' : 'Income'}</span>
+        <span class="breakdown-total-amount">${formatCurrency(grandTotal)}</span>
+    </div>`;
 }
 
 function updateCurrentPeriodDisplay() {
@@ -2908,15 +3163,19 @@ function renderTransactions() {
     // Sort transactions by date (newest first)
     const sortedTransactions = filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
     
-    container.innerHTML = sortedTransactions.map(transaction => `
+    container.innerHTML = sortedTransactions.map(transaction => {
+        const catLabel = getCategoryLabel(transaction.category);
+        const catIcon = getCategoryIcon(transaction.category);
+        const catTheme = transaction.type === 'income' ? 'cat-label-income' : 'cat-label-expense';
+        return `
         <div class="transaction-item slide-up">
             <div class="transaction-details">
                 <div class="category-icon ${transaction.type}">
-                    ${transaction.type === 'income' ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>'}
+                    <span class="txn-cat-emoji">${catIcon}</span>
                 </div>
                 <div class="transaction-info">
                     <h4>${transaction.description}</h4>
-                    <p>${formatDate(transaction.date)} • ${transaction.type === 'income' ? 'Income' : 'Expense'}</p>
+                    <p>${formatDate(transaction.date)} • <span class="txn-category-label ${catTheme}">${catLabel}</span></p>
                 </div>
             </div>
             <div class="transaction-amount ${transaction.type}">
@@ -2931,7 +3190,7 @@ function renderTransactions() {
                 </button>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Filtering

@@ -3656,6 +3656,120 @@ body {
     opacity: 0.8;
 }
 
+.sms-import-card {
+    margin: 1rem 0 1.5rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--card-bg), var(--surface-color));
+    box-shadow: var(--shadow);
+}
+
+.sms-import-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.sms-import-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sms-import-header small {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.sms-import-controls {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.sms-auto-controls {
+    grid-template-columns: 1fr 1fr;
+}
+
+.sms-sync-status {
+    margin: 0.75rem 0 0.2rem;
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.sms-sync-note {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+#smsInput {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    padding: 0.7rem 0.8rem;
+    font-size: 0.9rem;
+    resize: vertical;
+    min-height: 88px;
+}
+
+#smsInput:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.sms-import-btn {
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    padding: 0.8rem 1rem;
+    min-width: 180px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sms-import-btn.active {
+    background: linear-gradient(135deg, #16a34a, #059669);
+}
+
+.sms-secondary-btn {
+    background: linear-gradient(135deg, #64748b, #475569);
+}
+
+.sms-import-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
+}
+
+@media (max-width: 768px) {
+    .sms-import-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .sms-auto-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .sms-import-btn {
+        min-width: auto;
+        width: 100%;
+    }
+}
+
 .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

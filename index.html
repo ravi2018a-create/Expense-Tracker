@@ -244,6 +244,24 @@
             <div class="add-transaction-section">
                 <form id="transactionForm" class="transaction-form">
                     <h2>Add Transaction</h2>
+                    <div class="sms-import-card">
+                        <div class="sms-import-header">
+                            <h3><i class="fas fa-sms"></i> SMS Auto Fetch</h3>
+                            <small>No copy/paste needed. Connect your phone forwarder once, then auto-record transactions here.</small>
+                        </div>
+                        <div class="sms-import-controls sms-auto-controls">
+                            <button type="button" id="requestSmsPermissionBtn" class="sms-import-btn sms-secondary-btn">
+                                <i class="fas fa-shield-alt"></i>
+                                Request Permission
+                            </button>
+                            <button type="button" id="enableSmsSyncBtn" class="sms-import-btn">
+                                <i class="fas fa-wifi"></i>
+                                Enable Auto Fetch
+                            </button>
+                        </div>
+                        <p id="smsSyncStatus" class="sms-sync-status">Auto fetch is off.</p>
+                        <small class="sms-sync-note">Android browser cannot directly read all inbox SMS. Use an SMS forwarder app to push bank SMS to Supabase `sms_inbox`, then this app auto-imports.</small>
+                    </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="description">Description</label>

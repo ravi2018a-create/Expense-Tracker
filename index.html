@@ -242,26 +242,33 @@
 
             <!-- Add Transaction Form -->
             <div class="add-transaction-section">
-                <form id="transactionForm" class="transaction-form">
-                    <h2>Add Transaction</h2>
-                    <div class="sms-import-card">
-                        <div class="sms-import-header">
-                            <h3><i class="fas fa-sms"></i> SMS Auto Fetch</h3>
-                            <small>No copy/paste needed. Connect your phone forwarder once, then auto-record transactions here.</small>
-                        </div>
-                        <div class="sms-import-controls sms-auto-controls">
-                            <button type="button" id="requestSmsPermissionBtn" class="sms-import-btn sms-secondary-btn">
-                                <i class="fas fa-shield-alt"></i>
-                                Request Permission
-                            </button>
-                            <button type="button" id="enableSmsSyncBtn" class="sms-import-btn">
-                                <i class="fas fa-wifi"></i>
-                                Enable Auto Fetch
-                            </button>
-                        </div>
-                        <p id="smsSyncStatus" class="sms-sync-status">Auto fetch is off.</p>
-                        <small class="sms-sync-note">Android browser cannot directly read all inbox SMS. Use an SMS forwarder app to push bank SMS to Supabase `sms_inbox`, then this app auto-imports.</small>
+                <!-- Paste & Auto-Add Expenses -->
+                <div class="paste-card">
+                    <div class="paste-header">
+                        <h3><i class="fas fa-paste"></i> Paste & Auto-Add</h3>
+                        <small>Paste any bank message or expense text - AI will auto-detect amount, description & category</small>
                     </div>
+                    <div class="paste-controls">
+                        <textarea id="pasteInput" class="paste-textarea" placeholder="Paste bank SMS, email, or expense text here...
+Example: Swiggy - Food delivery - 459 INR debited
+Example: Amazon purchase - 2500 INR charged to card
+Example: Uber ride - 320 paid"></textarea>
+                        <div class="paste-button-group">
+                            <button type="button" id="autoAddBtn" class="auto-add-btn">
+                                <i class="fas fa-magic"></i>
+                                Auto Add Expense
+                            </button>
+                            <button type="button" id="clearPasteBtn" class="clear-paste-btn">
+                                <i class="fas fa-times"></i>
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                    <p id="pasteStatus" class="paste-status"></p>
+                </div>
+
+                <form id="transactionForm" class="transaction-form">
+                    <h2>Add Transaction Manually</h2>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="description">Description</label>
@@ -302,15 +309,6 @@
             <div class="transactions-section">
                 <div class="transactions-header">
                     <h2>Recent Transactions</h2>
-                    <div class="sync-status">
-                        <button id="refreshTransactionsBtn" class="refresh-transactions-btn" title="Refresh from database">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                        <span id="syncStatus" class="sync-indicator">
-                            <i class="fas fa-sync-alt"></i>
-                            <span class="sync-text">Synced</span>
-                        </span>
-                    </div>
                 </div>
                 <div class="transactions-scroll-container">
                     <div class="transactions-list" id="transactionsList">

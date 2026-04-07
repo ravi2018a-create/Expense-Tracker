@@ -3656,117 +3656,217 @@ body {
     opacity: 0.8;
 }
 
-.sms-import-card {
-    margin: 1rem 0 1.5rem;
-    padding: 1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    background: linear-gradient(135deg, var(--card-bg), var(--surface-color));
-    box-shadow: var(--shadow);
+/* Paste & Auto-Add Card */
+.paste-card {
+    margin: 1.5rem 0 2rem;
+    padding: 1.4rem;
+    border: 2px solid var(--border-color);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08), rgba(240, 147, 251, 0.06));
+    box-shadow: 0 14px 34px rgba(102, 126, 234, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.35s ease;
 }
 
-.sms-import-header {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.75rem;
+.paste-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.24), transparent);
+    transform: skewX(-12deg);
+    pointer-events: none;
 }
 
-.sms-import-header h3 {
-    margin: 0;
-    font-size: 0.95rem;
+.paste-card:hover {
+    border-color: rgba(102, 126, 234, 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 18px 42px rgba(102, 126, 234, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+[data-theme="dark"] .paste-card {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.18), rgba(240, 147, 251, 0.1));
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.paste-header {
+    margin-bottom: 1rem;
+    position: relative;
+    z-index: 1;
+}
+
+.paste-header h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.02rem;
     font-weight: 700;
     color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.55rem;
+    letter-spacing: 0.2px;
 }
 
-.sms-import-header small {
+.paste-header h3 i {
+    color: var(--primary-color);
+}
+
+.paste-header small {
     color: var(--text-secondary);
-    font-size: 0.82rem;
-}
-
-.sms-import-controls {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.75rem;
-    align-items: stretch;
-}
-
-.sms-auto-controls {
-    grid-template-columns: 1fr 1fr;
-}
-
-.sms-sync-status {
-    margin: 0.75rem 0 0.2rem;
     font-size: 0.86rem;
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-.sms-sync-note {
-    display: block;
-    color: var(--text-secondary);
-    font-size: 0.78rem;
     line-height: 1.45;
 }
 
-#smsInput {
-    width: 100%;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    padding: 0.7rem 0.8rem;
-    font-size: 0.9rem;
-    resize: vertical;
-    min-height: 88px;
+.paste-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+    z-index: 1;
 }
 
-#smsInput:focus {
+.paste-textarea {
+    width: 100%;
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6));
+    color: var(--text-primary);
+    padding: 1rem 1.1rem;
+    font-size: 0.96rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 500;
+    resize: vertical;
+    min-height: 112px;
+    line-height: 1.45;
+    overflow: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.paste-textarea::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+}
+
+[data-theme="dark"] .paste-textarea {
+    background: linear-gradient(135deg, rgba(45, 55, 72, 0.88), rgba(26, 32, 44, 0.64));
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.paste-textarea:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
-}
-
-.sms-import-btn {
-    border: none;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #0ea5e9, #2563eb);
-    color: #fff;
-    font-weight: 700;
-    padding: 0.8rem 1rem;
-    min-width: 180px;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.sms-import-btn.active {
-    background: linear-gradient(135deg, #16a34a, #059669);
-}
-
-.sms-secondary-btn {
-    background: linear-gradient(135deg, #64748b, #475569);
-}
-
-.sms-import-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2), 0 12px 30px rgba(102, 126, 234, 0.2);
+}
+
+.paste-textarea::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.paste-button-group {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.auto-add-btn,
+.clear-paste-btn {
+    border-radius: 14px;
+    font-weight: 700;
+    padding: 0.95rem 1.3rem;
+    cursor: pointer;
+    transition: all 0.28s ease;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    letter-spacing: 0.25px;
+    min-height: 52px;
+}
+
+.auto-add-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 55%, #f093fb 100%);
+    background-size: 200% 200%;
+    color: #fff;
+    border: none;
+    flex: 1;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.auto-add-btn:hover {
+    transform: translateY(-2px) scale(1.01);
+    background-position: 100% 50%;
+    box-shadow: 0 14px 34px rgba(102, 126, 234, 0.45), 0 0 22px rgba(240, 147, 251, 0.28);
+}
+
+.auto-add-btn:active {
+    transform: translateY(-1px);
+}
+
+.clear-paste-btn {
+    background: linear-gradient(135deg, var(--surface-color), var(--card-bg));
+    color: var(--text-secondary);
+    border: 2px solid var(--border-color);
+    min-width: 120px;
+}
+
+.clear-paste-btn:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+    border-color: rgba(102, 126, 234, 0.4);
+    transform: translateY(-1px);
+}
+
+.paste-status {
+    margin: 0.5rem 0 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    min-height: 1.5rem;
+    letter-spacing: 0.1px;
+    position: relative;
+    z-index: 1;
 }
 
 @media (max-width: 768px) {
-    .sms-import-controls {
-        grid-template-columns: 1fr;
+    .paste-card {
+        margin: 1rem 0 1.5rem;
+        padding: 1rem;
+        border-radius: 14px;
     }
 
-    .sms-auto-controls {
-        grid-template-columns: 1fr;
+    .paste-header h3 {
+        font-size: 0.95rem;
     }
 
-    .sms-import-btn {
-        min-width: auto;
+    .paste-header small {
+        font-size: 0.8rem;
+    }
+
+    .paste-button-group {
+        flex-direction: column;
+        gap: 0.65rem;
+    }
+
+    .auto-add-btn,
+    .clear-paste-btn {
         width: 100%;
+        min-width: 0;
+        min-height: 48px;
+    }
+
+    .paste-textarea {
+        min-height: 88px;
+        font-size: 0.9rem;
     }
 }
 
@@ -5353,49 +5453,7 @@ body {
 }
 
 .sync-status {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-}
-
-.refresh-transactions-btn {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    color: var(--text-secondary);
-    padding: 0.35rem 0.55rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    font-size: 0.85rem;
-}
-
-.refresh-transactions-btn:hover {
-    background: var(--hover-bg);
-    color: var(--primary-color);
-    border-color: var(--primary-color);
-    transform: rotate(30deg);
-}
-
-.sync-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.sync-indicator.syncing {
-    color: var(--warning-color);
-}
-
-.sync-indicator.synced {
-    color: var(--success-color);
-}
-
-.sync-indicator.error {
-    color: var(--error-color);
+    display: none;
 }
 
 .empty-state {

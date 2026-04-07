@@ -69,12 +69,6 @@ let currentUserId = null; // Add user ID tracking
 let comparisonChart = null; // Chart instance
 let customStartDate = null; // Custom range start
 let customEndDate = null; // Custom range end
-let smsAutoSyncEnabled = localStorage.getItem('sms_auto_sync_enabled') === 'true';
-let smsPollIntervalId = null;
-let smsPollInFlight = false;
-let smsSyncSchemaWarningShown = false;
-
-const SMS_POLL_INTERVAL_MS = 15000;
 
 // Chart filtering state
 let chartDataVisibility = {
@@ -101,6 +95,7 @@ const txnCategoryMap = {
     insurance: { label: 'Insurance', icon: '🛡️' },
     gifts: { label: 'Gifts & Donations', icon: '🎁' },
     pets: { label: 'Pets', icon: '🐾' },
+    credit_card: { label: 'Credit Card Bill', icon: '💳' },
     other_expense: { label: 'Other Expense', icon: '📦' },
     // Income categories
     salary: { label: 'Salary', icon: '💰' },
@@ -141,6 +136,7 @@ const expenseCategories = [
     { value: 'insurance', label: '🛡️ Insurance' },
     { value: 'gifts', label: '🎁 Gifts & Donations' },
     { value: 'pets', label: '🐾 Pets' },
+    { value: 'credit_card', label: '💳 Credit Card Bill' },
     { value: 'other_expense', label: '📦 Other Expense' }
 ];
 
@@ -353,10 +349,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                 console.log('🔄 Supabase session ready - loading transactions from database...');
                 await loadTransactions();
                 updateUI();
-                updateSmsSyncUI();
-                if (smsAutoSyncEnabled) {
-                    startSmsAutoSync();
-                }
                 
                 if (!wasAlreadyAuthenticated) {
                     showToast(`Welcome back, ${session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User'}!`, 'success');
@@ -371,7 +363,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                 // Clear all user data
                 currentUser = null;
                 transactions = [];
-                stopSmsAutoSync();
                 
                 // Clear local storage auth data including persistent session
                 localStorage.removeItem('expense-tracker-auth');
@@ -387,7 +378,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                 // Update UI
                 updateUIForAuth();
                 updateUI();
-                updateSmsSyncUI();
                 updateConnectionStatus('local');
                 
                 showToast('Successfully signed out', 'success');
@@ -446,15 +436,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     updateUI();
     updateTransactionCount(); // Ensure transaction count is displayed
     setCurrentDate();
-    updateSmsSyncUI();
 
-    if (currentUser && smsAutoSyncEnabled) {
-        startSmsAutoSync();
-    }
-
-    // Auto-refresh from Supabase every 30s for cross-device sync
-    startBackgroundRefresh();
-    
     // Hide loading overlay after initialization (backup)
     hideLoadingOverlay();
     
@@ -493,10 +475,6 @@ async function checkSupabaseAuth() {
             updateUIForAuth();
             updateConnectionStatus('database');
             console.log('✅ User automatically signed in:', currentUser.email);
-            updateSmsSyncUI();
-            if (smsAutoSyncEnabled) {
-                startSmsAutoSync();
-            }
             
             // Load user data in background (don't wait)
             Promise.all([
@@ -513,8 +491,6 @@ async function checkSupabaseAuth() {
         } else {
             console.log('ℹ️ No existing session found');
             updateConnectionStatus('local');
-            stopSmsAutoSync();
-            updateSmsSyncUI();
         }
         
         // Always hide loading overlay after check - immediate
@@ -778,7 +754,6 @@ async function handleSignOut() {
         currentUser = null;
         currentUserId = null; // Clear user ID to prevent cross-account data
         transactions = [];
-        stopSmsAutoSync();
         
         // Clear local storage auth data including persistent session
         localStorage.removeItem('expense-tracker-auth');
@@ -795,7 +770,6 @@ async function handleSignOut() {
         // Update UI immediately
         updateUIForAuth();
         updateUI();
-        updateSmsSyncUI();
         updateConnectionStatus('local');
         
         console.log('✅ Local signout complete');
@@ -1271,36 +1245,27 @@ function setupEventListeners() {
         console.warn('❌ Transaction form not found');
     }
 
-    const requestSmsPermissionBtn = document.getElementById('requestSmsPermissionBtn');
-    if (requestSmsPermissionBtn) {
-        requestSmsPermissionBtn.addEventListener('click', () => {
-            requestSmsPermission();
+    // Paste card buttons
+    const autoAddBtn = document.getElementById('autoAddBtn');
+    if (autoAddBtn) {
+        autoAddBtn.addEventListener('click', () => {
+            console.log('📋 Auto-add from paste clicked');
+            handlePasteAndAdd();
         });
+        console.log('✅ Auto-add button listener added');
     }
 
-    const enableSmsSyncBtn = document.getElementById('enableSmsSyncBtn');
-    if (enableSmsSyncBtn) {
-        enableSmsSyncBtn.addEventListener('click', () => {
-            toggleSmsAutoSync();
+    const clearPasteBtn = document.getElementById('clearPasteBtn');
+    if (clearPasteBtn) {
+        clearPasteBtn.addEventListener('click', () => {
+            const pasteInput = document.getElementById('pasteInput');
+            const pasteStatus = document.getElementById('pasteStatus');
+            if (pasteInput) pasteInput.value = '';
+            if (pasteStatus) pasteStatus.textContent = '';
         });
+        console.log('✅ Clear paste button listener added');
     }
 
-    const refreshTransactionsBtn = document.getElementById('refreshTransactionsBtn');
-    if (refreshTransactionsBtn) {
-        refreshTransactionsBtn.addEventListener('click', () => {
-            if (!currentUser) {
-                showToast('Sign in to sync from database.', 'warning');
-                return;
-            }
-            const icon = refreshTransactionsBtn.querySelector('i');
-            if (icon) icon.classList.add('fa-spin');
-            backgroundRefresh().finally(() => {
-                if (icon) icon.classList.remove('fa-spin');
-            });
-        });
-    }
-
-    updateSmsSyncUI();
     
     // Edit form
     const editForm = document.getElementById('editTransactionForm');
@@ -1840,128 +1805,7 @@ function updateTransactionCount() {
     }
 }
 
-function normalizeSmsDate(rawDate) {
-    if (!rawDate) return new Date().toISOString().split('T')[0];
 
-    const clean = rawDate.trim().replace(/[.]/g, '/').replace(/-/g, '/');
-    const parts = clean.split('/');
-    if (parts.length < 3) return new Date().toISOString().split('T')[0];
-
-    let day = parts[0].trim();
-    let month = parts[1].trim();
-    let year = parts[2].trim();
-
-    if (year.length === 2) year = `20${year}`;
-
-    const parsedDay = parseInt(day, 10);
-    const parsedMonth = parseInt(month, 10);
-    const parsedYear = parseInt(year, 10);
-
-    if (!parsedDay || !parsedMonth || !parsedYear) {
-        return new Date().toISOString().split('T')[0];
-    }
-
-    const safeDay = String(parsedDay).padStart(2, '0');
-    const safeMonth = String(parsedMonth).padStart(2, '0');
-    return `${parsedYear}-${safeMonth}-${safeDay}`;
-}
-
-function getAccessTokenFromStorage() {
-    const authData = localStorage.getItem('expense-tracker-auth');
-    if (!authData) return null;
-
-    try {
-        const parsed = JSON.parse(authData);
-        return parsed?.access_token || null;
-    } catch (error) {
-        console.error('❌ Error parsing auth data:', error);
-        return null;
-    }
-}
-
-function detectSmsType(text) {
-    const lower = text.toLowerCase();
-    if (/credited|received|refund|cashback|deposit|salary/i.test(lower)) {
-        return 'income';
-    }
-    if (/debited|spent|paid|purchase|withdrawn|sent|dr\b/i.test(lower)) {
-        return 'expense';
-    }
-    return 'expense';
-}
-
-function detectSmsCategory(type, descriptionText) {
-    const desc = (descriptionText || '').toLowerCase();
-    if (type === 'income') {
-        if (/salary|payroll|wages/.test(desc)) return 'salary';
-        if (/refund|reversal|cashback/.test(desc)) return 'refund';
-        if (/rent|tenant/.test(desc)) return 'rental_income';
-        if (/interest|dividend|mutual|stock|sip|fd/.test(desc)) return 'investments';
-        return 'other_income';
-    }
-
-    if (/zomato|swiggy|restaurant|food|dinner|lunch|breakfast|cafe/.test(desc)) return 'food';
-    if (/uber|ola|metro|train|bus|fuel|petrol|diesel|toll|parking/.test(desc)) return 'transport';
-    if (/amazon|flipkart|myntra|shopping|purchase|store/.test(desc)) return 'shopping';
-    if (/grocery|bigbasket|zepto|blinkit|instamart|dmart/.test(desc)) return 'groceries';
-    if (/rent|apartment|flat|housing/.test(desc)) return 'rent';
-    if (/electricity|water|gas|broadband|wifi|internet|recharge/.test(desc)) return 'utilities';
-    if (/doctor|hospital|pharmacy|medicine|medical|clinic/.test(desc)) return 'health';
-    if (/movie|netflix|hotstar|prime|spotify|entertainment/.test(desc)) return 'entertainment';
-    if (/insurance|policy|premium/.test(desc)) return 'insurance';
-    return 'other_expense';
-}
-
-function parseSmsMessage(message) {
-    const cleaned = (message || '').replace(/\s+/g, ' ').trim();
-    if (!cleaned) return null;
-
-    const amountMatch = cleaned.match(/(?:inr|rs\.?|₹)\s*([0-9,]+(?:\.\d{1,2})?)/i) || cleaned.match(/([0-9,]+(?:\.\d{1,2})?)\s*(?:inr|rs\.?|₹)/i);
-    if (!amountMatch) return null;
-
-    const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-    if (!Number.isFinite(amount) || amount <= 0) return null;
-
-    const type = detectSmsType(cleaned);
-
-    const dateMatch = cleaned.match(/(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})/);
-    const date = normalizeSmsDate(dateMatch ? dateMatch[1] : '');
-
-    const merchantMatch = cleaned.match(/(?:at|to|from|for)\s+([A-Za-z0-9 .&_-]{3,40})/i);
-    const description = merchantMatch
-        ? merchantMatch[1].trim()
-        : (type === 'income' ? 'SMS income record' : 'SMS expense record');
-
-    const category = detectSmsCategory(type, cleaned);
-
-    return {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        description,
-        amount,
-        category,
-        type,
-        date,
-        createdAt: new Date().toISOString(),
-        source: 'sms'
-    };
-}
-
-function parseSmsBatch(rawText) {
-    if (!rawText || !rawText.trim()) return [];
-
-    const blocks = rawText
-        .split(/\n\s*\n/)
-        .map(x => x.trim())
-        .filter(Boolean);
-
-    const candidates = blocks.length > 1
-        ? blocks
-        : rawText.split('\n').map(x => x.trim()).filter(Boolean);
-
-    return candidates
-        .map(parseSmsMessage)
-        .filter(Boolean);
-}
 
 function isLikelyDuplicate(transaction) {
     return transactions.some(existing => (
@@ -2051,246 +1895,164 @@ async function saveSingleTransaction(transaction, options = {}) {
 }
 
 async function handleSmsImport() {
-    const smsInput = document.getElementById('smsInput');
-    if (!smsInput) return;
+    // Removed - SMS auto-sync feature disabled
+}
 
-    const parsed = parseSmsBatch(smsInput.value);
-    if (parsed.length === 0) {
-        showToast('No valid SMS transaction found. Paste bank SMS text and try again.', 'warning');
+// ── Parse and detect expense details from pasted text ──────────────────────
+function detectExpenseType(text) {
+    const lower = text.toLowerCase();
+    if (/credited|received|refund|cashback|deposit|salary/i.test(lower)) {
+        return 'income';
+    }
+    if (/debited|spent|paid|purchase|withdrawn|sent|dr\b|charged|card/i.test(lower)) {
+        return 'expense';
+    }
+    return 'expense';
+}
+
+function detectExpenseCategory(type, descriptionText) {
+    const desc = (descriptionText || '').toLowerCase();
+    
+    if (type === 'income') {
+        if (/salary|payroll|wages/.test(desc)) return 'salary';
+        if (/refund|reversal|cashback/.test(desc)) return 'refund';
+        if (/rent|tenant/.test(desc)) return 'rental_income';
+        if (/interest|dividend|mutual|stock|sip|fd/.test(desc)) return 'investments';
+        return 'other_income';
+    }
+
+    // Expense categories
+    if (/zomato|swiggy|restaurant|food|dinner|lunch|breakfast|cafe|pizza|burger/.test(desc)) return 'food';
+    if (/uber|ola|metro|train|bus|fuel|petrol|diesel|toll|parking|auto/.test(desc)) return 'transport';
+    if (/amazon|flipkart|myntra|shopping|purchase|store|mall|buy/.test(desc)) return 'shopping';
+    if (/grocery|bigbasket|zepto|blinkit|instamart|dmart|fruit|veggie/.test(desc)) return 'groceries';
+    if (/rent|apartment|flat|housing|landlord|lease/.test(desc)) return 'rent';
+    if (/electricity|water|gas|broadband|wifi|internet|recharge|phone/.test(desc)) return 'utilities';
+    if (/doctor|hospital|pharmacy|medicine|medical|clinic|health|dental/.test(desc)) return 'health';
+    if (/movie|netflix|hotstar|prime|spotify|entertainment|game|concert/.test(desc)) return 'entertainment';
+    if (/insurance|policy|premium|coverage/.test(desc)) return 'insurance';
+    if (/cloth|shirt|pant|shoe|dress|jacket|wear/.test(desc)) return 'clothing';
+    if (/credit|card|emi|loan|debt/.test(desc)) return 'credit_card';
+    
+    return 'other_expense';
+}
+
+function parseExpenseText(message) {
+    const cleaned = (message || '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return null;
+
+    // Extract amount - look for patterns like "459 INR", "₹500", "500 rupees", etc.
+    const amountMatch = cleaned.match(/(?:inr|rs\.?|₹|rupee|rupees)\s*([0-9,]+(?:\.\d{1,2})?)/i) || 
+                       cleaned.match(/([0-9,]+(?:\.\d{1,2})?)\s*(?:inr|rs\.?|₹|rupee|rupees|debited|credited|paid|charged)/i);
+    
+    if (!amountMatch) return null;
+
+    const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+
+    const type = detectExpenseType(cleaned);
+
+    // Extract merchant/description
+    const merchantMatch = cleaned.match(/(?:at|to|from|for)\s+([A-Za-z0-9 .&_-]{3,40})/i) ||
+                         cleaned.match(/^([A-Za-z0-9 .&_-]{3,40})/i);
+    const description = merchantMatch
+        ? merchantMatch[1].trim()
+        : (type === 'income' ? 'Income' : 'Expense');
+
+    const category = detectExpenseCategory(type, cleaned);
+
+    return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        description,
+        amount,
+        category,
+        type,
+        date: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString()
+    };
+}
+
+function parseBatchText(rawText) {
+    if (!rawText || !rawText.trim()) return [];
+
+    // Split by newlines or blank lines
+    const lines = rawText
+        .split(/\n/)
+        .map(x => x.trim())
+        .filter(x => x.length > 0);
+
+    return lines
+        .map(parseExpenseText)
+        .filter(Boolean);
+}
+
+async function handlePasteAndAdd() {
+    const pasteInput = document.getElementById('pasteInput');
+    const pasteStatus = document.getElementById('pasteStatus');
+    
+    if (!pasteInput) return;
+
+    const text = pasteInput.value.trim();
+    if (!text) {
+        showToast('Please paste expense text first', 'warning');
         return;
     }
 
-    let savedCount = 0;
-    let skippedDuplicates = 0;
+    // Parse the pasted text
+    const expenses = parseBatchText(text);
+    
+    if (expenses.length === 0) {
+        pasteStatus.textContent = '❌ No valid expenses found. Try pasting: "Swiggy 459" or "Amazon 2500 INR"';
+        pasteStatus.style.color = 'var(--error-color)';
+        showToast('Could not parse expenses from text', 'warning');
+        return;
+    }
 
-    for (const txn of parsed) {
-        if (isLikelyDuplicate(txn)) {
-            skippedDuplicates += 1;
+    // Check for duplicates
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    for (const expense of expenses) {
+        if (isLikelyDuplicate(expense)) {
+            skippedCount++;
             continue;
         }
 
-        const ok = await saveSingleTransaction(txn, { silent: true });
-        if (ok) {
-            savedCount += 1;
-        }
+        const ok = await saveSingleTransaction(expense, { silent: true });
+        if (ok) addedCount++;
     }
 
-    smsInput.value = '';
-
-    if (savedCount > 0) {
-        showToast(`SMS import complete: ${savedCount} added${skippedDuplicates ? `, ${skippedDuplicates} skipped as duplicate` : ''}.`, 'success');
-    } else {
-        showToast('All detected SMS transactions were duplicates or invalid.', 'info');
-    }
-}
-
-function updateSmsSyncUI() {
-    const statusEl = document.getElementById('smsSyncStatus');
-    const btn = document.getElementById('enableSmsSyncBtn');
-
-    if (statusEl) {
-        if (!currentUser) {
-            statusEl.textContent = 'Sign in required for auto fetch.';
-        } else if (smsAutoSyncEnabled) {
-            statusEl.textContent = 'Auto fetch is on. Checking every 15 seconds.';
-        } else {
-            statusEl.textContent = 'Auto fetch is off.';
-        }
-    }
-
-    if (btn) {
-        btn.classList.toggle('active', !!smsAutoSyncEnabled);
-        btn.innerHTML = smsAutoSyncEnabled
-            ? '<i class="fas fa-wifi"></i> Auto Fetch ON'
-            : '<i class="fas fa-wifi"></i> Enable Auto Fetch';
+    // Update status
+    if (addedCount > 0) {
+        pasteStatus.textContent = `✅ Added ${addedCount} expense${addedCount > 1 ? 's' : ''}${skippedCount > 0 ? ` (${skippedCount} skipped as duplicate)` : ''}`;
+        pasteStatus.style.color = 'var(--success-color)';
+        pasteInput.value = '';
+        showToast(`Added ${addedCount} transaction${addedCount > 1 ? 's' : ''}!`, 'success');
+    } else if (skippedCount > 0) {
+        pasteStatus.textContent = `⚠️ All ${skippedCount} were duplicates`;
+        pasteStatus.style.color = 'var(--warning-color)';
     }
 }
 
-function stopSmsAutoSync() {
-    if (smsPollIntervalId) {
-        clearInterval(smsPollIntervalId);
-        smsPollIntervalId = null;
-    }
-}
 
-// ── Background cross-device refresh ──────────────────────────────────────────
+// SMS auto-sync features removed
+function updateSmsSyncUI() {}
+function stopSmsAutoSync() {}
+
+// Background refresh features removed
 let _bgRefreshIntervalId = null;
 let _bgRefreshing = false;
 
-async function backgroundRefresh() {
-    if (!currentUser || !supabaseClient || _bgRefreshing) return;
-    _bgRefreshing = true;
+async function backgroundRefresh() {}
+function startBackgroundRefresh() {}
 
-    try {
-        showSyncStatus('syncing');
-        await loadTransactions();
-        updateUI();
-        showSyncStatus('synced');
-    } catch (e) {
-        console.error('❌ Background refresh failed:', e);
-        showSyncStatus('error');
-    } finally {
-        _bgRefreshing = false;
-    }
-}
+// Mark SMS row functions removed
+async function markSmsRowProcessed(smsRowId, status) {}
+async function pollSmsInboxAndImport() {}
+function startSmsAutoSync() {}
+async function requestSmsPermission() {}
+function toggleSmsAutoSync() {}
 
-function startBackgroundRefresh() {
-    if (_bgRefreshIntervalId) clearInterval(_bgRefreshIntervalId);
-
-    // Poll every 30s while signed in
-    _bgRefreshIntervalId = setInterval(() => {
-        if (currentUser) backgroundRefresh();
-    }, 30000);
-
-    // Refresh when user switches back to tab
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && currentUser) {
-            backgroundRefresh();
-        }
-    });
-
-    // Refresh when window regains focus (desktop)
-    window.addEventListener('focus', () => {
-        if (currentUser) backgroundRefresh();
-    });
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function markSmsRowProcessed(smsRowId, status) {
-    if (!currentUser || !supabaseClient) return;
-    const accessToken = getAccessTokenFromStorage();
-    if (!accessToken) return;
-
-    try {
-        await fetch(`${SUPABASE_URL}/rest/v1/sms_inbox?id=eq.${smsRowId}&user_id=eq.${currentUser.id}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${accessToken}`,
-                'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({
-                processed: true,
-                processed_at: new Date().toISOString(),
-                parse_status: status
-            })
-        });
-    } catch (error) {
-        console.error('❌ Failed to mark SMS row as processed:', error);
-    }
-}
-
-async function pollSmsInboxAndImport() {
-    if (!smsAutoSyncEnabled || !currentUser || !supabaseClient || smsPollInFlight) return;
-
-    const accessToken = getAccessTokenFromStorage();
-    if (!accessToken) return;
-
-    smsPollInFlight = true;
-
-    try {
-        const url = `${SUPABASE_URL}/rest/v1/sms_inbox?select=id,message,received_at,created_at,processed&user_id=eq.${currentUser.id}&processed=eq.false&order=received_at.asc.nullslast,created_at.asc&limit=25`;
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': SUPABASE_ANON_KEY,
-                'Authorization': `Bearer ${accessToken}`
-            }
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error('❌ SMS inbox poll failed:', response.status, errText);
-            if (!smsSyncSchemaWarningShown) {
-                smsSyncSchemaWarningShown = true;
-                showToast('SMS auto-fetch table not ready. Run sms-inbox-table.sql.', 'warning');
-            }
-            return;
-        }
-
-        const inboxRows = await response.json();
-        if (!Array.isArray(inboxRows) || inboxRows.length === 0) {
-            return;
-        }
-
-        let imported = 0;
-        for (const row of inboxRows) {
-            const parsed = parseSmsMessage(row.message || '');
-            if (!parsed) {
-                await markSmsRowProcessed(row.id, 'invalid');
-                continue;
-            }
-
-            if (row.received_at && typeof row.received_at === 'string') {
-                parsed.date = row.received_at.slice(0, 10);
-            }
-
-            if (isLikelyDuplicate(parsed)) {
-                await markSmsRowProcessed(row.id, 'duplicate');
-                continue;
-            }
-
-            const ok = await saveSingleTransaction(parsed, { silent: true });
-            await markSmsRowProcessed(row.id, ok ? 'imported' : 'failed');
-            if (ok) imported += 1;
-        }
-
-        if (imported > 0) {
-            showToast(`SMS auto-fetch added ${imported} new transaction${imported > 1 ? 's' : ''}.`, 'success');
-            updateUI();
-        }
-    } catch (error) {
-        console.error('❌ SMS auto-fetch error:', error);
-    } finally {
-        smsPollInFlight = false;
-    }
-}
-
-function startSmsAutoSync() {
-    stopSmsAutoSync();
-
-    if (!smsAutoSyncEnabled || !currentUser) {
-        updateSmsSyncUI();
-        return;
-    }
-
-    pollSmsInboxAndImport();
-    smsPollIntervalId = setInterval(() => {
-        pollSmsInboxAndImport();
-    }, SMS_POLL_INTERVAL_MS);
-
-    updateSmsSyncUI();
-}
-
-async function requestSmsPermission() {
-    if (!('OTPCredential' in window)) {
-        showToast('Direct inbox SMS permission is not available in this browser.', 'warning');
-        return;
-    }
-
-    showToast('OTP API exists, but browser cannot read full bank inbox SMS automatically.', 'info');
-}
-
-function toggleSmsAutoSync() {
-    if (!currentUser) {
-        showToast('Sign in first to enable SMS auto fetch.', 'warning');
-        return;
-    }
-
-    smsAutoSyncEnabled = !smsAutoSyncEnabled;
-    localStorage.setItem('sms_auto_sync_enabled', smsAutoSyncEnabled ? 'true' : 'false');
-
-    if (smsAutoSyncEnabled) {
-        startSmsAutoSync();
-        showToast('SMS auto fetch enabled.', 'success');
-    } else {
-        stopSmsAutoSync();
-        updateSmsSyncUI();
-        showToast('SMS auto fetch disabled.', 'info');
-    }
-}
 
 // Transaction management
 async function handleAddTransaction(e) {

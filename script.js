@@ -95,6 +95,7 @@ const txnCategoryMap = {
     insurance: { label: 'Insurance', icon: '🛡️' },
     gifts: { label: 'Gifts & Donations', icon: '🎁' },
     pets: { label: 'Pets', icon: '🐾' },
+    loan_given: { label: 'Loan Given', icon: '🤝' },
     credit_card: { label: 'Credit Card Bill', icon: '💳' },
     other_expense: { label: 'Other Expense', icon: '📦' },
     // Income categories
@@ -103,6 +104,7 @@ const txnCategoryMap = {
     business: { label: 'Business', icon: '📈' },
     investments: { label: 'Investments', icon: '📊' },
     rental_income: { label: 'Rental Income', icon: '🏘️' },
+    loan_borrowed: { label: 'Loan Borrowed', icon: '🏦' },
     refund: { label: 'Refund', icon: '💸' },
     other_income: { label: 'Other Income', icon: '🪙' },
     // Legacy fallbacks
@@ -136,6 +138,7 @@ const expenseCategories = [
     { value: 'insurance', label: '🛡️ Insurance' },
     { value: 'gifts', label: '🎁 Gifts & Donations' },
     { value: 'pets', label: '🐾 Pets' },
+    { value: 'loan_given', label: '🤝 Loan Given' },
     { value: 'credit_card', label: '💳 Credit Card Bill' },
     { value: 'other_expense', label: '📦 Other Expense' }
 ];
@@ -146,6 +149,7 @@ const incomeCategories = [
     { value: 'business', label: '📈 Business' },
     { value: 'investments', label: '📊 Investments' },
     { value: 'rental_income', label: '🏘️ Rental Income' },
+    { value: 'loan_borrowed', label: '🏦 Loan Borrowed' },
     { value: 'refund', label: '💸 Refund' },
     { value: 'other_income', label: '🪙 Other Income' }
 ];
@@ -1944,6 +1948,7 @@ function detectExpenseCategory(type, descriptionText) {
     
     if (type === 'income') {
         if (/salary|payroll|wages/.test(desc)) return 'salary';
+        if (/loan received|borrowed|loan disbursed|loan credited|personal loan|took loan/.test(desc)) return 'loan_borrowed';
         if (/refund|reversal|cashback/.test(desc)) return 'refund';
         if (/rent|tenant/.test(desc)) return 'rental_income';
         if (/interest|dividend|mutual|stock|sip|fd/.test(desc)) return 'investments';
@@ -1951,6 +1956,7 @@ function detectExpenseCategory(type, descriptionText) {
     }
 
     // Expense categories
+    if (/loan given|loan sent|gave loan|lent|lend|loan to/.test(desc)) return 'loan_given';
     if (/\bcredit\s*card\b|\bcc\s*bill\b|card\s*bill|card\s*payment|\bemi\b|loan\s*emi|loan\s*repayment|\bbank\s*card\b|\bcard\s*xx\d{2,}\b/.test(desc)) return 'credit_card';
     if (/zomato|swiggy|restaurant|food|dinner|lunch|breakfast|cafe|pizza|burger/.test(desc)) return 'food';
     if (/uber|ola|metro|train|bus|fuel|petrol|diesel|toll|parking|auto/.test(desc)) return 'transport';

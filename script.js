@@ -1901,12 +1901,41 @@ async function handleSmsImport() {
 // ── Parse and detect expense details from pasted text ──────────────────────
 function detectExpenseType(text) {
     const lower = text.toLowerCase();
-    if (/credited|received|refund|cashback|deposit|salary/i.test(lower)) {
-        return 'income';
-    }
-    if (/debited|spent|paid|purchase|withdrawn|sent|dr\b|charged|card/i.test(lower)) {
-        return 'expense';
-    }
+
+    // Prefer debit signals first to avoid false income classification.
+    const debitKeywords = [
+        /debited/i,
+        /spent/i,
+        /paid/i,
+        /purchase/i,
+        /withdrawn/i,
+        /sent/i,
+        /dr\b/i,
+        /charged/i,
+        /bill/i,
+        /emi/i
+    ];
+
+    const creditKeywords = [
+        /credited/i,
+        /received/i,
+        /refund/i,
+        /cashback/i,
+        /deposit/i,
+        /salary/i,
+        /cr\b/i
+    ];
+
+    const debitScore = debitKeywords.reduce((score, pattern) => score + (pattern.test(lower) ? 1 : 0), 0);
+    const creditScore = creditKeywords.reduce((score, pattern) => score + (pattern.test(lower) ? 1 : 0), 0);
+
+    if (debitScore > creditScore) return 'expense';
+    if (creditScore > debitScore) return 'income';
+
+    // Tie-breaker: explicit debited/credited words have highest priority.
+    if (/\bdebited\b/i.test(lower)) return 'expense';
+    if (/\bcredited\b/i.test(lower)) return 'income';
+
     return 'expense';
 }
 
@@ -1937,6 +1966,38 @@ function detectExpenseCategory(type, descriptionText) {
     return 'other_expense';
 }
 
+function extractCounterpartyName(text, type) {
+    const candidates = [];
+
+    if (type === 'income') {
+        candidates.push(
+            text.match(/(?:from|received from|credited by)\s+([A-Za-z][A-Za-z0-9 .&_-]{2,40})/i)
+        );
+    } else {
+        candidates.push(
+            text.match(/(?:to|at|paid to|charged at|spent at|purchase at)\s+([A-Za-z][A-Za-z0-9 .&_-]{2,40})/i)
+        );
+    }
+
+    candidates.push(
+        text.match(/(?:at|to|from|for)\s+([A-Za-z][A-Za-z0-9 .&_-]{2,40})/i)
+    );
+
+    for (const match of candidates) {
+        if (!match || !match[1]) continue;
+
+        let name = match[1]
+            .replace(/\b(on|via|using|ref|utr|txn|txnid|a\/c|acct|account|card|bal|avl)\b.*$/i, '')
+            .replace(/[^A-Za-z0-9 .&_-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (name.length >= 3) return name;
+    }
+
+    return '';
+}
+
 function parseExpenseText(message) {
     const cleaned = (message || '').replace(/\s+/g, ' ').trim();
     if (!cleaned) return null;
@@ -1952,12 +2013,11 @@ function parseExpenseText(message) {
 
     const type = detectExpenseType(cleaned);
 
-    // Extract merchant/description
-    const merchantMatch = cleaned.match(/(?:at|to|from|for)\s+([A-Za-z0-9 .&_-]{3,40})/i) ||
-                         cleaned.match(/^([A-Za-z0-9 .&_-]{3,40})/i);
-    const description = merchantMatch
-        ? merchantMatch[1].trim()
-        : (type === 'income' ? 'Income' : 'Expense');
+    // Extract counterparty/source first and then mark direction.
+    const counterparty = extractCounterpartyName(cleaned, type);
+    const description = counterparty
+        ? `${type === 'income' ? 'From' : 'To'} ${counterparty}`
+        : (type === 'income' ? 'Income received' : 'Expense payment');
 
     const category = detectExpenseCategory(type, cleaned);
 

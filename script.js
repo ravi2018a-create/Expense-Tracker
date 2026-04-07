@@ -2564,24 +2564,72 @@ function formatDateForInput(date) {
 }
 
 // Data persistence with user separation
+function getActiveCategoryStorageKey() {
+    if (!currentUserId) return null;
+    return `activeCategory_${currentUserId}`;
+}
+
+function persistActiveCategory() {
+    const key = getActiveCategoryStorageKey();
+    if (!key) return;
+    localStorage.setItem(key, activeCategory);
+}
+
+function restoreActiveCategory() {
+    const key = getActiveCategoryStorageKey();
+    if (!key) return;
+
+    const savedCategory = localStorage.getItem(key);
+    if (savedCategory && categories[savedCategory]) {
+        activeCategory = savedCategory;
+    }
+}
+
 // Category Management Functions
 function switchCategory(categoryId) {
     if (!categories[categoryId]) return;
+
+    const transactionsListEl = document.getElementById('transactionsList');
+    if (transactionsListEl) {
+        transactionsListEl.classList.remove('category-switched');
+        transactionsListEl.classList.add('category-switching');
+    }
     
     // Update active category
     activeCategory = categoryId;
+    persistActiveCategory();
     
     // Update UI
     document.querySelectorAll('.category-tab').forEach(tab => {
         tab.classList.remove('active');
+        tab.classList.remove('tab-switch-pop');
     });
-    document.querySelector(`[data-category="${categoryId}"]`).classList.add('active');
+    const activeTab = document.querySelector(`[data-category="${categoryId}"]`);
+    if (activeTab) {
+        activeTab.classList.add('active');
+        // Restart pop animation on every switch.
+        void activeTab.offsetWidth;
+        activeTab.classList.add('tab-switch-pop');
+    }
     
     // Load transactions for this category
     transactions = categories[activeCategory].transactions;
     
     // Update the UI
     updateUI();
+
+    const refreshedListEl = document.getElementById('transactionsList');
+    if (refreshedListEl) {
+        requestAnimationFrame(() => {
+            refreshedListEl.classList.remove('category-switching');
+            refreshedListEl.classList.add('category-switched');
+            setTimeout(() => {
+                refreshedListEl.classList.remove('category-switched');
+            }, 450);
+        });
+    }
+
+    showToast(`Switched to ${categories[activeCategory].name}`, 'info');
     
     console.log(`🔄 Switched to category: ${categories[activeCategory].name}`);
 }
@@ -2617,6 +2665,7 @@ async function deleteCategory(categoryId) {
         // If current category was deleted, switch to daily
         if (activeCategory === categoryId) {
             switchCategory('daily');
+            persistActiveCategory();
         }
         
         await saveCategories();
@@ -2639,6 +2688,7 @@ function saveTransactions() {
     
     // Also save user's last activity
     localStorage.setItem(`lastActivity_${currentUserId}`, new Date().toISOString());
+    persistActiveCategory();
 
     // Keep backend category snapshot updated so custom tab assignment is preserved.
     if (currentUser && supabaseClient) {
@@ -2654,6 +2704,7 @@ async function saveCategories() {
     // Save to localStorage as backup
     const key = `categories_${currentUserId}`;
     localStorage.setItem(key, JSON.stringify(categories));
+    persistActiveCategory();
     console.log('💾 Categories saved to localStorage');
     
     // Save to Supabase backend if authenticated
@@ -2890,6 +2941,10 @@ async function loadCategories() {
         if (data.length > 0) {
             const categoriesData = data[0];
             categories = JSON.parse(categoriesData.categories_json);
+            restoreActiveCategory();
+            if (!categories[activeCategory]) {
+                activeCategory = 'daily';
+            }
             console.log(`✅ Categories loaded from database: ${Object.keys(categories).length} categories`);
             
             // Save to localStorage as cache
@@ -2921,6 +2976,7 @@ function loadFromLocalStorage() {
     
     if (savedCategories) {
         categories = JSON.parse(savedCategories);
+        restoreActiveCategory();
         console.log(`Loaded ${Object.keys(categories).length} categories from localStorage`);
     } else {
         // Check for legacy transactions

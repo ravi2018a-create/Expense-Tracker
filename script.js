@@ -1951,6 +1951,7 @@ function detectExpenseCategory(type, descriptionText) {
     }
 
     // Expense categories
+    if (/\bcredit\s*card\b|\bcc\s*bill\b|card\s*bill|card\s*payment|\bemi\b|loan\s*emi|loan\s*repayment|\bbank\s*card\b|\bcard\s*xx\d{2,}\b/.test(desc)) return 'credit_card';
     if (/zomato|swiggy|restaurant|food|dinner|lunch|breakfast|cafe|pizza|burger/.test(desc)) return 'food';
     if (/uber|ola|metro|train|bus|fuel|petrol|diesel|toll|parking|auto/.test(desc)) return 'transport';
     if (/amazon|flipkart|myntra|shopping|purchase|store|mall|buy/.test(desc)) return 'shopping';
@@ -1961,8 +1962,6 @@ function detectExpenseCategory(type, descriptionText) {
     if (/movie|netflix|hotstar|prime|spotify|entertainment|game|concert/.test(desc)) return 'entertainment';
     if (/insurance|policy|premium|coverage/.test(desc)) return 'insurance';
     if (/cloth|shirt|pant|shoe|dress|jacket|wear/.test(desc)) return 'clothing';
-    if (/\bcredit\s*card\b|\bcc\s*bill\b|card\s*bill|card\s*payment|\bemi\b|loan\s*emi|loan\s*repayment/.test(desc)) return 'credit_card';
-    
     return 'other_expense';
 }
 
@@ -2009,6 +2008,16 @@ function isGenericCounterparty(name) {
 
 function extractCounterpartyName(text, type) {
     const candidates = [];
+
+    // Handle bank phrasing like: "... debited ...; DEEPAK PRAJAPAT credited"
+    if (type === 'expense') {
+        candidates.push(
+            text.match(/;\s*([A-Za-z][A-Za-z .&_-]{2,50})\s+credited\b/i)
+        );
+        candidates.push(
+            text.match(/\b([A-Za-z][A-Za-z .&_-]{2,50})\s+credited\b/i)
+        );
+    }
 
     if (type === 'income') {
         candidates.push(

@@ -5360,6 +5360,26 @@ body {
     color: var(--text-secondary);
 }
 
+.refresh-transactions-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    padding: 0.35rem 0.55rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.refresh-transactions-btn:hover {
+    background: var(--hover-bg);
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    transform: rotate(30deg);
+}
+
 .sync-indicator {
     display: flex;
     align-items: center;

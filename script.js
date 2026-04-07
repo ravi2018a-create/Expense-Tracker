@@ -451,6 +451,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (currentUser && smsAutoSyncEnabled) {
         startSmsAutoSync();
     }
+
+    // Auto-refresh from Supabase every 30s for cross-device sync
+    startBackgroundRefresh();
     
     // Hide loading overlay after initialization (backup)
     hideLoadingOverlay();
@@ -1282,6 +1285,21 @@ function setupEventListeners() {
         });
     }
 
+    const refreshTransactionsBtn = document.getElementById('refreshTransactionsBtn');
+    if (refreshTransactionsBtn) {
+        refreshTransactionsBtn.addEventListener('click', () => {
+            if (!currentUser) {
+                showToast('Sign in to sync from database.', 'warning');
+                return;
+            }
+            const icon = refreshTransactionsBtn.querySelector('i');
+            if (icon) icon.classList.add('fa-spin');
+            backgroundRefresh().finally(() => {
+                if (icon) icon.classList.remove('fa-spin');
+            });
+        });
+    }
+
     updateSmsSyncUI();
     
     // Edit form
@@ -2094,6 +2112,49 @@ function stopSmsAutoSync() {
         smsPollIntervalId = null;
     }
 }
+
+// ── Background cross-device refresh ──────────────────────────────────────────
+let _bgRefreshIntervalId = null;
+let _bgRefreshing = false;
+
+async function backgroundRefresh() {
+    if (!currentUser || !supabaseClient || _bgRefreshing) return;
+    _bgRefreshing = true;
+
+    try {
+        showSyncStatus('syncing');
+        await loadTransactions();
+        updateUI();
+        showSyncStatus('synced');
+    } catch (e) {
+        console.error('❌ Background refresh failed:', e);
+        showSyncStatus('error');
+    } finally {
+        _bgRefreshing = false;
+    }
+}
+
+function startBackgroundRefresh() {
+    if (_bgRefreshIntervalId) clearInterval(_bgRefreshIntervalId);
+
+    // Poll every 30s while signed in
+    _bgRefreshIntervalId = setInterval(() => {
+        if (currentUser) backgroundRefresh();
+    }, 30000);
+
+    // Refresh when user switches back to tab
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && currentUser) {
+            backgroundRefresh();
+        }
+    });
+
+    // Refresh when window regains focus (desktop)
+    window.addEventListener('focus', () => {
+        if (currentUser) backgroundRefresh();
+    });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function markSmsRowProcessed(smsRowId, status) {
     if (!currentUser || !supabaseClient) return;

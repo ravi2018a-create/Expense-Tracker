@@ -2633,6 +2633,13 @@ function saveTransactions() {
     
     // Also save user's last activity
     localStorage.setItem(`lastActivity_${currentUserId}`, new Date().toISOString());
+
+    // Keep backend category snapshot updated so custom tab assignment is preserved.
+    if (currentUser && supabaseClient) {
+        saveCategories().catch(error => {
+            console.error('❌ Failed to sync category snapshot:', error);
+        });
+    }
 }
 
 async function saveCategories() {
@@ -2724,8 +2731,9 @@ async function loadTransactions() {
     console.log('🔄 Loading transactions and categories...');
     
     // First, try to load categories from backend
+    let categoriesLoaded = false;
     if (currentUser && supabaseClient) {
-        const categoriesLoaded = await loadCategories();
+        categoriesLoaded = await loadCategories();
         if (!categoriesLoaded) {
             console.log('📂 Loading categories from localStorage as fallback...');
         }
@@ -2774,11 +2782,46 @@ async function loadTransactions() {
             
             const data = await response.json();
             
-            transactions = data || [];
-            console.log(`✅ Loaded ${transactions.length} transactions from database`);
-            if (transactions.length > 0) {
-                console.log('📊 Sample transaction:', transactions[0]);
+            const dbTransactions = data || [];
+            console.log(`✅ Loaded ${dbTransactions.length} transactions from database`);
+            if (dbTransactions.length > 0) {
+                console.log('📊 Sample transaction:', dbTransactions[0]);
             }
+
+            if (!categories.daily) {
+                categories.daily = { name: 'Daily Expenses', icon: 'fas fa-calendar-day', transactions: [] };
+            }
+
+            if (categoriesLoaded) {
+                // Keep existing category separation and append missing DB transactions to Daily.
+                const knownIds = new Set();
+                Object.values(categories).forEach(category => {
+                    (category.transactions || []).forEach(txn => {
+                        if (txn && txn.id != null) knownIds.add(String(txn.id));
+                    });
+                });
+
+                const missingFromCategories = dbTransactions.filter(txn => {
+                    if (!txn || txn.id == null) return false;
+                    return !knownIds.has(String(txn.id));
+                });
+
+                if (missingFromCategories.length > 0) {
+                    categories.daily.transactions = [
+                        ...(categories.daily.transactions || []),
+                        ...missingFromCategories
+                    ];
+                    console.log(`➕ Added ${missingFromCategories.length} missing DB transactions to Daily category`);
+                }
+            } else {
+                // No category snapshot available: keep imported DB items under Daily.
+                categories.daily.transactions = dbTransactions;
+            }
+
+            if (!categories[activeCategory]) {
+                activeCategory = 'daily';
+            }
+            transactions = categories[activeCategory]?.transactions || [];
             
             // Also save to localStorage as backup
             saveTransactions();
@@ -2791,7 +2834,6 @@ async function loadTransactions() {
     } else {
         // Load from localStorage
         console.log('💾 Loading from localStorage (no user/supabase)');
-        loadFromLocalStorage();
         loadFromLocalStorage();
     }
 }
@@ -2887,8 +2929,12 @@ function loadFromLocalStorage() {
         }
     }
     
+    if (!categories[activeCategory]) {
+        activeCategory = 'daily';
+    }
+
     // Set transactions to active category
-    transactions = categories[activeCategory].transactions;
+    transactions = categories[activeCategory]?.transactions || [];
     console.log(`Loaded ${transactions.length} transactions for category: ${categories[activeCategory].name}`);
 }
 

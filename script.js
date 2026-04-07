@@ -1961,9 +1961,50 @@ function detectExpenseCategory(type, descriptionText) {
     if (/movie|netflix|hotstar|prime|spotify|entertainment|game|concert/.test(desc)) return 'entertainment';
     if (/insurance|policy|premium|coverage/.test(desc)) return 'insurance';
     if (/cloth|shirt|pant|shoe|dress|jacket|wear/.test(desc)) return 'clothing';
-    if (/credit|card|emi|loan|debt/.test(desc)) return 'credit_card';
+    if (/\bcredit\s*card\b|\bcc\s*bill\b|card\s*bill|card\s*payment|\bemi\b|loan\s*emi|loan\s*repayment/.test(desc)) return 'credit_card';
     
     return 'other_expense';
+}
+
+function extractTransactionAmount(text) {
+    const prioritizedPatterns = [
+        /(?:inr|rs\.?|₹)\s*([0-9,]+(?:\.\d{1,2})?)\s*(?:has been\s*)?(?:debited|credited|paid|spent|charged|received)/i,
+        /(?:debited|credited|paid|spent|charged|received)\s*(?:with|for|by|from|to|at)?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+(?:\.\d{1,2})?)/i,
+        /(?:amount|amt)\s*(?:of)?\s*(?:inr|rs\.?|₹)\s*([0-9,]+(?:\.\d{1,2})?)/i
+    ];
+
+    for (const pattern of prioritizedPatterns) {
+        const match = text.match(pattern);
+        if (!match) continue;
+
+        const amount = parseFloat(match[1].replace(/,/g, ''));
+        if (Number.isFinite(amount) && amount > 0) return amount;
+    }
+
+    const currencyMatches = [...text.matchAll(/(?:inr|rs\.?|₹)\s*([0-9,]+(?:\.\d{1,2})?)/gi)];
+    for (const match of currencyMatches) {
+        const idx = typeof match.index === 'number' ? match.index : 0;
+        const nearby = text.slice(Math.max(0, idx - 30), Math.min(text.length, idx + 40)).toLowerCase();
+
+        // Skip balance or limit amounts which are not transaction amounts.
+        if (/avl\s*bal|available\s*bal|available\s*balance|closing\s*bal|balance\s*:|bal\s*:|limit|outstanding|total\s*due/.test(nearby)) {
+            continue;
+        }
+
+        const amount = parseFloat(match[1].replace(/,/g, ''));
+        if (Number.isFinite(amount) && amount > 0) return amount;
+    }
+
+    return null;
+}
+
+function isGenericCounterparty(name) {
+    if (!name) return true;
+    if (/^(?:rs|inr|mrp|amt|amount|upi|payment|transaction|txn)$/i.test(name)) return true;
+    if (/^\d+(?:\.\d{1,2})?$/.test(name)) return true;
+    if (/^(?:credit|debit|credited|debited)\b/i.test(name)) return true;
+    if (/\b(?:upi|txn|txnid|utr|ref|imps|neft|rtgs|account|a\/c|balance|avl|card)\b/i.test(name) && name.split(' ').length <= 2) return true;
+    return false;
 }
 
 function extractCounterpartyName(text, type) {
@@ -1988,11 +2029,13 @@ function extractCounterpartyName(text, type) {
 
         let name = match[1]
             .replace(/\b(on|via|using|ref|utr|txn|txnid|a\/c|acct|account|card|bal|avl)\b.*$/i, '')
+            .replace(/^[.\-_\s]+/, '')
+            .replace(/^(?:rs\.?|inr|₹)\s*/i, '')
             .replace(/[^A-Za-z0-9 .&_-]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
-        if (name.length >= 3) return name;
+        if (name.length >= 3 && !isGenericCounterparty(name)) return name;
     }
 
     return '';
@@ -2002,13 +2045,7 @@ function parseExpenseText(message) {
     const cleaned = (message || '').replace(/\s+/g, ' ').trim();
     if (!cleaned) return null;
 
-    // Extract amount - look for patterns like "459 INR", "₹500", "500 rupees", etc.
-    const amountMatch = cleaned.match(/(?:inr|rs\.?|₹|rupee|rupees)\s*([0-9,]+(?:\.\d{1,2})?)/i) || 
-                       cleaned.match(/([0-9,]+(?:\.\d{1,2})?)\s*(?:inr|rs\.?|₹|rupee|rupees|debited|credited|paid|charged)/i);
-    
-    if (!amountMatch) return null;
-
-    const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+    const amount = extractTransactionAmount(cleaned);
     if (!Number.isFinite(amount) || amount <= 0) return null;
 
     const type = detectExpenseType(cleaned);

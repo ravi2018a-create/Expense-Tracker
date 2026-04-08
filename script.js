@@ -173,6 +173,24 @@ function getCategoryIcon(category) {
     return txnCategoryMap[category]?.icon || (category === 'income' ? '⬆️' : '⬇️');
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeForJsSingleQuotedString(value) {
+    return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/</g, '\\x3C');
+}
+
 // Expense & Income category definitions (user-customizable)
 const DEFAULT_EXPENSE_CATEGORIES = [
     { value: 'food', label: '🍔 Food & Dining' },
@@ -674,6 +692,79 @@ function initWorkbenchLayoutControls() {
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', stopDrag);
     });
+}
+
+function setupDynamicActionDelegation() {
+    const categoryList = document.getElementById('categoryList');
+    if (categoryList) {
+        categoryList.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action][data-category-id]');
+            if (!actionButton) return;
+
+            const categoryId = actionButton.getAttribute('data-category-id');
+            if (!categoryId) return;
+
+            const action = actionButton.getAttribute('data-action');
+            if (action === 'edit-category') {
+                editCategory(categoryId);
+            } else if (action === 'delete-category') {
+                confirmDeleteCategory(categoryId);
+            }
+        });
+    }
+
+    const breakdownBody = document.getElementById('categoryBreakdownBody');
+    if (breakdownBody) {
+        breakdownBody.addEventListener('click', (event) => {
+            const item = event.target.closest('.breakdown-item[data-breakdown-category][data-breakdown-type]');
+            if (!item) return;
+
+            const category = item.getAttribute('data-breakdown-category');
+            const type = item.getAttribute('data-breakdown-type');
+            const firstTransactionId = item.getAttribute('data-first-transaction-id') || '';
+            if (!category || !type) return;
+
+            filterByBreakdownCategory(category, type, firstTransactionId);
+        });
+    }
+
+    const transactionsList = document.getElementById('transactionsList');
+    if (transactionsList) {
+        transactionsList.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('.action-btn[data-action][data-transaction-id]');
+            if (!actionButton) return;
+
+            const transactionId = actionButton.getAttribute('data-transaction-id');
+            if (!transactionId) return;
+
+            const action = actionButton.getAttribute('data-action');
+            if (action === 'edit-transaction') {
+                editTransaction(transactionId);
+            } else if (action === 'delete-transaction') {
+                deleteTransaction(transactionId);
+            }
+        });
+    }
+
+    const expenseCategoryList = document.getElementById('expenseCategoryList');
+    const incomeCategoryList = document.getElementById('incomeCategoryList');
+    const handleCategoryMgmtDelete = (event) => {
+        const deleteButton = event.target.closest('.category-mgmt-item-delete[data-category-type][data-category-value]');
+        if (!deleteButton) return;
+
+        const type = deleteButton.getAttribute('data-category-type');
+        const value = deleteButton.getAttribute('data-category-value');
+        if (!type || !value) return;
+
+        deleteCategoryFromManagement(type, value);
+    };
+
+    if (expenseCategoryList) {
+        expenseCategoryList.addEventListener('click', handleCategoryMgmtDelete);
+    }
+    if (incomeCategoryList) {
+        incomeCategoryList.addEventListener('click', handleCategoryMgmtDelete);
+    }
 }
 
 // Initialize the application
@@ -1814,6 +1905,7 @@ function setupEventListeners() {
     loadBreakdownTabPreference();
     setupCategoryTypeSync();
     initWorkbenchLayoutControls();
+    setupDynamicActionDelegation();
 
     // Update category type labels on type change
     const typeSelect = document.getElementById('type');
@@ -3672,13 +3764,15 @@ function updateCategoryTabs() {
     
     // Add category tabs
     Object.entries(categories).forEach(([id, category]) => {
+        const safeIconClass = String(category.icon || 'fas fa-folder').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim() || 'fas fa-folder';
+        const safeName = escapeHtml(category.name || 'Category');
         const tab = document.createElement('div');
         tab.className = `category-tab ${id === activeCategory ? 'active' : ''}`;
         tab.setAttribute('data-category', id);
         tab.onclick = () => switchCategory(id);
         tab.innerHTML = `
-            <i class="${category.icon}"></i>
-            <span>${category.name}</span>
+            <i class="${safeIconClass}"></i>
+            <span>${safeName}</span>
         `;
         categoryTabs.appendChild(tab);
     });
@@ -3697,20 +3791,24 @@ function updateCategoryList() {
     
     Object.entries(categories).forEach(([id, category]) => {
         const isDefault = id === 'daily';
+        const safeIconClass = String(category.icon || 'fas fa-folder').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim() || 'fas fa-folder';
+        const safeName = escapeHtml(category.name || 'Category');
+        const safeTxnCount = Number.isFinite(category.transactions?.length) ? category.transactions.length : 0;
+        const safeIdForAttr = escapeHtml(id);
         const item = document.createElement('div');
         item.className = 'category-item';
         item.innerHTML = `
             <div class="category-info">
-                <i class="${category.icon}"></i>
-                <span>${category.name}</span>
-                <small>(${category.transactions.length} transactions)</small>
+                <i class="${safeIconClass}"></i>
+                <span>${safeName}</span>
+                <small>(${safeTxnCount} transactions)</small>
             </div>
             <div class="category-item-actions">
                 ${!isDefault ? `
-                    <button class="category-action-btn" onclick="editCategory('${id}')" title="Edit">
+                    <button class="category-action-btn" data-action="edit-category" data-category-id="${safeIdForAttr}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="category-action-btn delete" onclick="confirmDeleteCategory('${id}')" title="Delete">
+                    <button class="category-action-btn delete" data-action="delete-category" data-category-id="${safeIdForAttr}" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 ` : `
@@ -4037,21 +4135,26 @@ function updateCategoryBreakdown() {
             const absPct = ((Math.abs(net) / maxAbs) * 100).toFixed(1);
             const icon = getCategoryIcon(cat);
             const label = getCategoryLabel(cat);
-            const color = net >= 0 ? '#ef4444' : '#22c55e';
+            const color = net >= 0 ? '#818cf8' : '#22c55e';
             const firstTxnId = data.transactions.length ? data.transactions[0].id : '';
             const isActive = currentBreakdownCategoryFilter === cat && currentTypeFilter === 'all';
             const stateText = net > 0 ? 'Outstanding' : (net < 0 ? 'Returned More' : 'Settled');
+            const safeCatAttr = escapeHtml(cat);
+            const safeFirstTxnIdAttr = escapeHtml(firstTxnId);
+            const safeIcon = escapeHtml(icon);
+            const safeLabel = escapeHtml(label);
+            const safeStateText = escapeHtml(stateText);
 
             return `
-            <div class="breakdown-item ${isActive ? 'active' : ''}" style="--bar-color: ${color}" onclick="filterByBreakdownCategory('${cat}', 'all', '${firstTxnId}')" title="Click to show all ${label} transactions together.">
+            <div class="breakdown-item ${isActive ? 'active' : ''}" data-breakdown-category="${safeCatAttr}" data-breakdown-type="all" data-first-transaction-id="${safeFirstTxnIdAttr}" style="--bar-color: ${color}" title="Click to show all ${safeLabel} transactions together.">
                 <div class="breakdown-main-row">
                     <div class="transaction-details">
                         <div class="category-icon ${net >= 0 ? 'expense' : 'income'}">
-                            <span class="txn-cat-emoji">${icon}</span>
+                            <span class="txn-cat-emoji">${safeIcon}</span>
                         </div>
                         <div class="transaction-info">
-                            <h4>${label} <span class="txn-category-label ${net >= 0 ? 'cat-label-expense' : 'cat-label-income'}">${data.expenseCount + data.incomeCount} txn${(data.expenseCount + data.incomeCount) > 1 ? 's' : ''}</span></h4>
-                            <p>Given: ${formatCurrency(data.expenseTotal)} • Returned: ${formatCurrency(data.incomeTotal)} • ${stateText}</p>
+                            <h4>${safeLabel} <span class="txn-category-label ${net >= 0 ? 'cat-label-expense' : 'cat-label-income'}">${data.expenseCount + data.incomeCount} txn${(data.expenseCount + data.incomeCount) > 1 ? 's' : ''}</span></h4>
+                            <p>Given: ${formatCurrency(data.expenseTotal)} • Returned: ${formatCurrency(data.incomeTotal)} • ${safeStateText}</p>
                         </div>
                     </div>
                     <div class="transaction-amount ${net >= 0 ? 'expense' : 'income'}">${formatCurrency(Math.abs(net))}</div>
@@ -4063,7 +4166,7 @@ function updateCategoryBreakdown() {
         }).join('') + `
         <div class="breakdown-total-row">
             <span class="breakdown-total-label">Overall Net</span>
-            <span class="breakdown-total-amount" style="color:${totalOutstanding >= 0 ? '#ef4444' : '#22c55e'}">${formatCurrency(Math.abs(totalOutstanding))}</span>
+            <span class="breakdown-total-amount" style="color:${totalOutstanding >= 0 ? '#818cf8' : '#22c55e'}">${formatCurrency(Math.abs(totalOutstanding))}</span>
         </div>`;
 
         return;
@@ -4096,7 +4199,7 @@ function updateCategoryBreakdown() {
     const sorted = Object.entries(catTotals).sort((a, b) => b[1].total - a[1].total);
 
     // Color palette
-    const expenseColors = ['#ef4444','#f97316','#f59e0b','#eab308','#ec4899','#e11d48','#d946ef','#c026d3','#a855f7','#8b5cf6','#f43f5e','#fb923c','#fbbf24','#a3e635','#f87171','#fb7185','#c084fc'];
+    const expenseColors = ['#818cf8','#6366f1','#4f46e5','#8b5cf6','#a78bfa','#c4b5fd','#7c3aed','#6d28d9','#93c5fd','#60a5fa','#3b82f6','#38bdf8','#22d3ee','#a5b4fc','#c7d2fe','#b39ddb','#9fa8da'];
     const incomeColors = ['#22c55e','#10b981','#14b8a6','#06b6d4','#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#059669','#0d9488','#0891b2','#2563eb','#4f46e5'];
     const colors = activeBreakdownTab === 'expense' ? expenseColors : incomeColors;
 
@@ -4114,16 +4217,21 @@ function updateCategoryBreakdown() {
             .join(', ');
         const topTxnId = data.transactions.length ? data.transactions[0].id : '';
         const isActive = currentBreakdownCategoryFilter === cat && currentTypeFilter === activeBreakdownTab;
+        const safeCatAttr = escapeHtml(cat);
+        const safeTopTxnIdAttr = escapeHtml(topTxnId);
+        const safeIcon = escapeHtml(icon);
+        const safeLabel = escapeHtml(label);
+        const safeTopItems = escapeHtml(topItems);
         return `
-        <div class="breakdown-item ${themeClass} ${isActive ? 'active' : ''}" style="--bar-color: ${color}" onclick="filterByBreakdownCategory('${cat}', '${activeBreakdownTab}', '${topTxnId}')" title="Click to filter ${label} transactions. Click again to return to normal view.">
+        <div class="breakdown-item ${themeClass} ${isActive ? 'active' : ''}" data-breakdown-category="${safeCatAttr}" data-breakdown-type="${activeBreakdownTab}" data-first-transaction-id="${safeTopTxnIdAttr}" style="--bar-color: ${color}" title="Click to filter ${safeLabel} transactions. Click again to return to normal view.">
             <div class="breakdown-main-row">
                 <div class="transaction-details">
                     <div class="category-icon ${activeBreakdownTab}">
-                        <span class="txn-cat-emoji">${icon}</span>
+                        <span class="txn-cat-emoji">${safeIcon}</span>
                     </div>
                     <div class="transaction-info">
-                        <h4>${label} <span class="txn-category-label ${activeBreakdownTab === 'income' ? 'cat-label-income' : 'cat-label-expense'}">${data.count} txn${data.count > 1 ? 's' : ''}</span></h4>
-                        <p title="${topItems}">${topItems} • ${pct}%</p>
+                        <h4>${safeLabel} <span class="txn-category-label ${activeBreakdownTab === 'income' ? 'cat-label-income' : 'cat-label-expense'}">${data.count} txn${data.count > 1 ? 's' : ''}</span></h4>
+                        <p title="${safeTopItems}">${safeTopItems} • ${pct}%</p>
                     </div>
                 </div>
                 <div class="transaction-amount ${activeBreakdownTab}">${formatCurrency(data.total)}</div>
@@ -4439,25 +4547,31 @@ function renderTransactions() {
         const catLabel = getCategoryLabel(transaction.category);
         const catIcon = getCategoryIcon(transaction.category);
         const catTheme = transaction.type === 'income' ? 'cat-label-income' : 'cat-label-expense';
+        const safeType = transaction.type === 'income' ? 'income' : 'expense';
+        const safeTxnId = escapeHtml(transaction.id);
+        const safeDescription = escapeHtml(transaction.description);
+        const safeDateLabel = escapeHtml(formatDate(transaction.date));
+        const safeCatLabel = escapeHtml(catLabel);
+        const safeCatIcon = escapeHtml(catIcon);
         return `
-        <div class="transaction-item slide-up" id="txn-${transaction.id}" data-transaction-id="${transaction.id}">
+        <div class="transaction-item slide-up" id="txn-${safeTxnId}" data-transaction-id="${safeTxnId}">
             <div class="transaction-details">
-                <div class="category-icon ${transaction.type}">
-                    <span class="txn-cat-emoji">${catIcon}</span>
+                <div class="category-icon ${safeType}">
+                    <span class="txn-cat-emoji">${safeCatIcon}</span>
                 </div>
                 <div class="transaction-info">
-                    <h4>${transaction.description}</h4>
-                    <p>${formatDate(transaction.date)} • <span class="txn-category-label ${catTheme}">${catLabel}</span></p>
+                    <h4>${safeDescription}</h4>
+                    <p>${safeDateLabel} • <span class="txn-category-label ${catTheme}">${safeCatLabel}</span></p>
                 </div>
             </div>
-            <div class="transaction-amount ${transaction.type}">
+            <div class="transaction-amount ${safeType}">
                 ${transaction.type === 'income' ? '+' : '-'}${formatCurrency(transaction.amount)}
             </div>
             <div class="transaction-actions">
-                <button class="action-btn" onclick="editTransaction('${transaction.id}')" title="Edit">
+                <button class="action-btn" data-action="edit-transaction" data-transaction-id="${safeTxnId}" title="Edit">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button class="action-btn delete" onclick="deleteTransaction('${transaction.id}')" title="Delete">
+                <button class="action-btn delete" data-action="delete-transaction" data-transaction-id="${safeTxnId}" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5641,9 +5755,9 @@ function updateComparisonChart() {
     incomeGradient.addColorStop(1, 'rgba(22, 163, 74, 0.5)');
     
     const expenseGradient = context.createLinearGradient(0, 0, 0, 350);
-    expenseGradient.addColorStop(0, 'rgba(239, 68, 68, 1)');
-    expenseGradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.85)');
-    expenseGradient.addColorStop(1, 'rgba(220, 38, 38, 0.5)');
+    expenseGradient.addColorStop(0, 'rgba(129, 140, 248, 1)');
+    expenseGradient.addColorStop(0.4, 'rgba(99, 102, 241, 0.85)');
+    expenseGradient.addColorStop(1, 'rgba(79, 70, 229, 0.5)');
     
     // Create datasets based on visibility settings
     const datasets = [];
@@ -6041,6 +6155,7 @@ function populateCategoryMgmtList(type) {
 
     cats.forEach(cat => {
         const icon = txnCategoryMap[cat.value]?.icon || (type === 'income' ? '⬆️' : '⬇️');
+        const safeValue = escapeHtml(cat.value);
         const item = document.createElement('div');
         item.className = 'category-mgmt-item';
         item.setAttribute('data-type', txnCategoriesSharedMode ? 'shared' : type);
@@ -6050,7 +6165,7 @@ function populateCategoryMgmtList(type) {
                 <div class="category-mgmt-item-name">${cat.label}</div>
                 <div class="category-mgmt-item-type">${txnCategoriesSharedMode ? 'shared' : type}</div>
             </div>
-            <button type="button" class="category-mgmt-item-delete" onclick="deleteCategoryFromManagement('${type}', '${cat.value}')" title="Delete category">
+            <button type="button" class="category-mgmt-item-delete" data-category-type="${type}" data-category-value="${safeValue}" title="Delete category">
                 <i class="fas fa-trash"></i>
             </button>
         `;

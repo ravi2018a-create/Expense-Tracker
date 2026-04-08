@@ -8,6 +8,7 @@
     <meta name="author" content="Expense Tracker App">
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="format-detection" content="telephone=no">
     <title>Expense Tracker - Daily, Monthly, Yearly</title>
@@ -62,44 +63,41 @@
             </div>
         </header>
 
-        <!-- Date Header - Clean Professional Design -->
-        <div class="current-period-header">
-            <div class="period-nav-container">
-                <button class="period-nav-btn" id="prevPeriod" title="Previous">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-                <div class="period-center">
-                    <h3 id="currentPeriodDisplay">All Transactions</h3>
-                    <p id="currentDateDetails" class="date-details">
-                        Complete transaction history
-                        <span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>
-                    </p>
-                    <div class="period-inputs">
-                        <input type="date" id="dateSelector" class="period-input-hidden">
-                        <input type="month" id="monthSelector" class="period-input-hidden">
-                        <input type="number" id="yearSelector" class="period-input-hidden" min="2020" max="2030">
+        <!-- Enhanced Summary Cards with Analytics -->
+        <div class="summary-section summary-section-top">
+            <div class="summary-row">
+                <div class="summary-card clickable" id="incomeCard" onclick="filterByType('income')" title="Click to show only income transactions">
+                    <div class="summary-icon income">
+                        <i class="fas fa-arrow-up"></i>
                     </div>
-                </div>
-                <button class="period-nav-btn" id="nextPeriod" title="Next">
-                    <i class="fas fa-chevron-right"></i>
-                </button>
-            </div>
-            <div class="period-footer">
-                <div class="period-footer-left">
-                    <div class="all-transactions-section">
-                        <button class="all-transactions-btn active" data-period="all" title="Show All Transactions">
-                            <i class="fas fa-list"></i>
-                            <span>ALL</span>
-                        </button>
+                    <div class="summary-content">
+                        <h3 id="incomeLabel">Total Income</h3>
+                        <span id="totalIncome">₹0.00</span>
+                        <small id="avgIncomeText" class="summary-subtitle">Avg: ₹0.00/day</small>
                     </div>
-                    <button class="quick-period-btn today-mobile" data-period="today" title="Today">TODAY</button>
+                    <div class="filter-indicator"><i class="fas fa-filter"></i></div>
                 </div>
-                <div class="quick-period-buttons">
-                    <button class="quick-period-btn" data-days="7" title="Last 7 Days">LAST 7D</button>
-                    <button class="quick-period-btn" data-days="30" title="Last 30 Days">LAST 30D</button>
-                    <button class="quick-period-btn" data-days="90" title="Last 3 Months">LAST 3M</button>
-                    <button class="quick-period-btn" data-days="180" title="Last 6 Months">LAST 6M</button>
-                    <button class="quick-period-btn" data-days="365" title="Last Year">LAST 1Y</button>
+                <div class="summary-card clickable" id="expenseCard" onclick="filterByType('expense')" title="Click to show only expense transactions">
+                    <div class="summary-icon expense">
+                        <i class="fas fa-arrow-down"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="expenseLabel">Total Expenses</h3>
+                        <span id="totalExpenses">₹0.00</span>
+                        <small id="avgExpenseText" class="summary-subtitle">Avg: ₹0.00/day</small>
+                    </div>
+                    <div class="filter-indicator"><i class="fas fa-filter"></i></div>
+                </div>
+                <div class="summary-card clickable" id="balanceCard" onclick="filterByType('all')" title="Click to show all transactions">
+                    <div class="summary-icon balance">
+                        <i class="fas fa-balance-scale"></i>
+                    </div>
+                    <div class="summary-content">
+                        <h3 id="balanceLabel">Balance</h3>
+                        <span id="balance">₹0.00</span>
+                        <small id="avgBalanceText" class="summary-subtitle">Avg: ₹0.00/day</small>
+                    </div>
+                    <div class="filter-indicator"><i class="fas fa-filter"></i></div>
                 </div>
             </div>
         </div>
@@ -127,25 +125,69 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Navigation Tabs -->
-            <nav class="view-nav">
-                <button class="nav-btn active" data-view="daily">
-                    <i class="fas fa-calendar-day"></i>
-                    Daily
-                </button>
-                <button class="nav-btn" data-view="monthly">
-                    <i class="fas fa-calendar-alt"></i>
-                    Monthly
-                </button>
-                <button class="nav-btn" data-view="yearly">
-                    <i class="fas fa-calendar"></i>
-                    Yearly
-                </button>
-                <button class="nav-btn" data-view="custom">
-                    <i class="fas fa-sliders-h"></i>
-                    Custom
-                </button>
-            </nav>
+            <section class="timeline-control-hub">
+                <!-- Navigation Tabs -->
+                <nav class="view-nav">
+                    <button class="nav-btn active" data-view="daily">
+                        <i class="fas fa-calendar-day"></i>
+                        Daily
+                    </button>
+                    <button class="nav-btn" data-view="monthly">
+                        <i class="fas fa-calendar-alt"></i>
+                        Monthly
+                    </button>
+                    <button class="nav-btn" data-view="yearly">
+                        <i class="fas fa-calendar"></i>
+                        Yearly
+                    </button>
+                    <button class="nav-btn" data-view="custom">
+                        <i class="fas fa-sliders-h"></i>
+                        Custom
+                    </button>
+                </nav>
+
+                <!-- Compact Period/All-Transactions Toolbar -->
+                <div class="current-period-header relocated-period-toolbar">
+                    <div class="period-nav-container">
+                        <button class="period-nav-btn" id="prevPeriod" title="Previous">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="period-center">
+                            <h3 id="currentPeriodDisplay">All Transactions</h3>
+                            <p id="currentDateDetails" class="date-details">
+                                Complete transaction history
+                                <span id="transactionCountHeader" class="transaction-count-badge">• 0 transactions</span>
+                            </p>
+                            <div class="period-inputs">
+                                <input type="date" id="dateSelector" class="period-input-hidden">
+                                <input type="month" id="monthSelector" class="period-input-hidden">
+                                <input type="number" id="yearSelector" class="period-input-hidden" min="2020" max="2030">
+                            </div>
+                        </div>
+                        <button class="period-nav-btn" id="nextPeriod" title="Next">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="period-footer">
+                        <div class="period-footer-left">
+                            <div class="all-transactions-section">
+                                <button class="all-transactions-btn active" data-period="all" title="Show All Transactions">
+                                    <i class="fas fa-list"></i>
+                                    <span>ALL</span>
+                                </button>
+                            </div>
+                            <button class="quick-period-btn today-mobile" data-period="today" title="Today">TODAY</button>
+                        </div>
+                        <div class="quick-period-buttons">
+                            <button class="quick-period-btn" data-days="7" title="Last 7 Days">LAST 7D</button>
+                            <button class="quick-period-btn" data-days="30" title="Last 30 Days">LAST 30D</button>
+                            <button class="quick-period-btn" data-days="90" title="Last 3 Months">LAST 3M</button>
+                            <button class="quick-period-btn" data-days="180" title="Last 6 Months">LAST 6M</button>
+                            <button class="quick-period-btn" data-days="365" title="Last Year">LAST 1Y</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <!-- Custom Date Range Picker -->
             <div class="custom-range-section" id="customRangeSection" style="display: none;">
@@ -174,97 +216,42 @@
                 </div>
             </div>
 
-            <!-- Enhanced Summary Cards with Analytics -->
-            <div class="summary-section">
-                <!-- Primary Summary Row -->
-                <div class="summary-row">
-                    <div class="summary-card">
-                        <div class="summary-icon income">
-                            <i class="fas fa-arrow-up"></i>
-                        </div>
-                        <div class="summary-content">
-                            <h3 id="incomeLabel">Total Income</h3>
-                            <span id="totalIncome">₹0.00</span>
-                            <small id="avgIncomeText" class="summary-subtitle">Avg: ₹0.00/day</small>
-                        </div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-icon expense">
-                            <i class="fas fa-arrow-down"></i>
-                        </div>
-                        <div class="summary-content">
-                            <h3 id="expenseLabel">Total Expenses</h3>
-                            <span id="totalExpenses">₹0.00</span>
-                            <small id="avgExpenseText" class="summary-subtitle">Avg: ₹0.00/day</small>
-                        </div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-icon balance">
-                            <i class="fas fa-balance-scale"></i>
-                        </div>
-                        <div class="summary-content">
-                            <h3 id="balanceLabel">Balance</h3>
-                            <span id="balance">₹0.00</span>
-                            <small id="avgBalanceText" class="summary-subtitle">Avg: ₹0.00/day</small>
-                        </div>
-                    </div>
-                </div>
-                
-
-            </div>
-
-            <!-- Category-wise Breakdown -->
-            <div class="category-breakdown-section" id="categoryBreakdownSection">
-                <div class="category-breakdown-header">
-                    <h3 class="category-breakdown-title">
-                        <i class="fas fa-th-large"></i>
-                        <span>Category Breakdown</span>
-                    </h3>
-                    <div class="breakdown-toggle-tabs">
-                        <button class="breakdown-tab active" data-breakdown="expense" onclick="switchBreakdownTab('expense')">
-                            <i class="fas fa-arrow-down"></i> Expenses
-                        </button>
-                        <button class="breakdown-tab" data-breakdown="income" onclick="switchBreakdownTab('income')">
-                            <i class="fas fa-arrow-up"></i> Income
-                        </button>
-                    </div>
-                </div>
-                <div class="category-breakdown-body" id="categoryBreakdownBody">
-                    <!-- Populated by JS -->
-                    <div class="breakdown-empty">
-                        <i class="fas fa-chart-pie"></i>
-                        <p>No transactions to show</p>
-                    </div>
-                </div>
-            </div>
-
-
-
-            <!-- Add Transaction Form -->
+            <!-- Add Transaction Form (collapsed by default) -->
+            <div class="add-transaction-collapsible add-transaction-fullwidth collapsed" id="addTransactionCollapsible">
+                <button type="button" class="add-transaction-toggle" id="toggleAddTransactionBtn" aria-expanded="false">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Add Transaction</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
             <div class="add-transaction-section">
                 <!-- Paste & Auto-Add Expenses -->
-                <div class="paste-card">
+                <div class="paste-card collapsed" id="pasteAutoAddCard">
                     <div class="paste-header">
-                        <h3><i class="fas fa-paste"></i> Paste & Auto-Add</h3>
-                        <small>Paste any bank message or expense text - AI will auto-detect amount, description & category</small>
-                    </div>
-                    <div class="paste-controls">
-                        <textarea id="pasteInput" class="paste-textarea" placeholder="Paste bank SMS, email, or expense text here...
-Example: Swiggy - Food delivery - 459 INR debited
-Example: Amazon purchase - 2500 INR charged to card
-Example: Uber ride - 320 paid"></textarea>
-                        <div class="paste-button-group">
-                            <button type="button" id="autoAddBtn" class="auto-add-btn">
-                                <i class="fas fa-magic"></i>
-                                Auto Add Expense
-                            </button>
-                            <button type="button" id="clearPasteBtn" class="clear-paste-btn">
-                                <i class="fas fa-times"></i>
-                                Clear
-                            </button>
+                        <div class="paste-header-left">
+                            <h3><i class="fas fa-paste"></i> Paste & Auto-Add</h3>
+                            <small>Paste bank/SMS text to auto-detect details</small>
                         </div>
+                        <button type="button" class="paste-toggle-btn" id="togglePasteCardBtn" aria-expanded="false">
+                            <span class="paste-toggle-label" id="pasteToggleLabel">Show</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
                     </div>
-                    <p id="pasteStatus" class="paste-status"></p>
+                    <div class="paste-collapsible-body" id="pasteCollapsibleBody">
+                        <div class="paste-controls">
+                            <textarea id="pasteInput" class="paste-textarea" placeholder="Paste SMS or expense text here"></textarea>
+                            <div class="paste-button-group">
+                                <button type="button" id="autoAddBtn" class="auto-add-btn">
+                                    <i class="fas fa-magic"></i>
+                                    Auto Add Expense
+                                </button>
+                                <button type="button" id="clearPasteBtn" class="clear-paste-btn">
+                                    <i class="fas fa-times"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <p id="pasteStatus" class="paste-status"></p>
+                    </div>
                 </div>
 
                 <form id="transactionForm" class="transaction-form">
@@ -286,16 +273,24 @@ Example: Uber ride - 320 paid"></textarea>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="txnCategory">Category</label>
-                            <select id="txnCategory" required>
-                                <!-- Populated dynamically by JS based on type -->
-                            </select>
+                            <label for="txnCategory">Category <span class="category-type-label" id="categoryTypeLabel"></span></label>
+                            <div class="txn-category-input-group">
+                                <select id="txnCategory" required>
+                                    <!-- Populated dynamically by JS based on type -->
+                                </select>
+                                <button type="button" id="addTxnCategoryBtn" class="txn-cat-action-btn" title="Add new category">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button type="button" id="deleteTxnCategoryBtn" class="txn-cat-action-btn delete" title="Delete this category">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group date-group">
                             <label for="date">Date</label>
                             <input type="date" id="date" required>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group submit-group">
                             <button type="submit" class="submit-btn">
                                 <i class="fas fa-plus"></i>
                                 Add Transaction
@@ -304,6 +299,11 @@ Example: Uber ride - 320 paid"></textarea>
                     </div>
                 </form>
             </div>
+            </div>
+
+            <div class="expense-workbench" id="expenseWorkbench">
+                <div class="expense-workbench-shell">
+                <div class="expense-workbench-left">
 
             <!-- Transactions List -->
             <div class="transactions-section">
@@ -318,6 +318,40 @@ Example: Uber ride - 320 paid"></textarea>
                             <p>Add your first transaction to get started</p>
                         </div>
                     </div>
+                </div>
+            </div>
+
+                </div>
+
+                <div class="expense-workbench-right">
+                    <!-- Category-wise Breakdown -->
+                    <div class="category-breakdown-section" id="categoryBreakdownSection">
+                        <div class="category-breakdown-header">
+                            <h3 class="category-breakdown-title">
+                                <i class="fas fa-th-large"></i>
+                                <span>Category Breakdown</span>
+                            </h3>
+                            <div class="breakdown-toggle-tabs">
+                                <button class="breakdown-tab active" data-breakdown="expense" onclick="switchBreakdownTab('expense')">
+                                    <i class="fas fa-arrow-down"></i> Expenses
+                                </button>
+                                <button class="breakdown-tab" data-breakdown="income" onclick="switchBreakdownTab('income')">
+                                    <i class="fas fa-arrow-up"></i> Income
+                                </button>
+                                <button class="breakdown-tab" data-breakdown="common" onclick="switchBreakdownTab('common')">
+                                    <i class="fas fa-link"></i> Common
+                                </button>
+                            </div>
+                        </div>
+                        <div class="category-breakdown-body" id="categoryBreakdownBody">
+                            <!-- Populated by JS -->
+                            <div class="breakdown-empty">
+                                <i class="fas fa-chart-pie"></i>
+                                <p>No transactions to show</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </div>
             </div>
 
@@ -460,10 +494,18 @@ Example: Uber ride - 320 paid"></textarea>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="editTxnCategory">Category</label>
-                        <select id="editTxnCategory" required>
-                            <!-- Populated dynamically by JS based on type -->
-                        </select>
+                        <label for="editTxnCategory">Category <span class="category-type-label" id="editCategoryTypeLabel"></span></label>
+                        <div class="txn-category-input-group">
+                            <select id="editTxnCategory" required>
+                                <!-- Populated dynamically by JS based on type -->
+                            </select>
+                            <button type="button" id="addEditTxnCategoryBtn" class="txn-cat-action-btn" title="Add new category">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button type="button" id="deleteEditTxnCategoryBtn" class="txn-cat-action-btn delete" title="Delete this category">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="editDate">Date</label>
@@ -521,6 +563,43 @@ Example: Uber ride - 320 paid"></textarea>
                         </button>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label for="categoryTheme">Color Theme (auto-switches when entering category)</label>
+                    <div class="color-theme-selector">
+                        <button type="button" class="color-theme-option active" data-color-theme="none" title="Keep current theme">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #9ca3af, #6b7280);"></div>
+                            <span>Default</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="purple" title="Purple Vibes">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
+                            <span>Purple</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="ocean" title="Ocean Blue">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #0ea5e9, #0284c7);"></div>
+                            <span>Ocean</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="forest" title="Forest Green">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #10b981, #059669);"></div>
+                            <span>Forest</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="sunset" title="Sunset Orange">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #f59e0b, #ea580c);"></div>
+                            <span>Sunset</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="rose" title="Rose Pink">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #ec4899, #db2777);"></div>
+                            <span>Rose</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="midnight" title="Midnight Dark">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #1e293b, #0f172a);"></div>
+                            <span>Midnight</span>
+                        </button>
+                        <button type="button" class="color-theme-option" data-color-theme="gold" title="Golden Luxury">
+                            <div class="color-preview" style="background: linear-gradient(135deg, #fbbf24, #d97706);"></div>
+                            <span>Gold</span>
+                        </button>
+                    </div>
+                </div>
                 <div class="form-actions">
                     <button type="button" class="btn-cancel" onclick="closeCategoryModal()">Cancel</button>
                     <button type="submit" class="btn-primary">
@@ -540,8 +619,61 @@ Example: Uber ride - 320 paid"></textarea>
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="category-list" id="categoryList">
-                <!-- Category items will be populated here -->
+            <div class="category-manage-mode-tabs">
+                <button class="category-manage-mode-tab active" data-mode="main" onclick="switchCategoryManageMode('main')">
+                    <i class="fas fa-layer-group"></i> Main Categories
+                </button>
+                <button class="category-manage-mode-tab" data-mode="transaction" onclick="switchCategoryManageMode('transaction')">
+                    <i class="fas fa-tags"></i> Transaction Categories
+                </button>
+            </div>
+
+            <div class="category-manage-section" id="mainCategoryManageSection">
+                <div class="category-manage-section-header">
+                    <p>Manage your top-level tabs like Daily Expenses, loan tracking, and other main sections.</p>
+                </div>
+                <div class="category-list" id="categoryList">
+                    <!-- Main category items will be populated here -->
+                </div>
+                <div class="category-mgmt-actions">
+                    <button type="button" class="btn-secondary" onclick="openCategoryModal()">
+                        <i class="fas fa-plus"></i> Add Main Category
+                    </button>
+                </div>
+            </div>
+
+            <div class="category-manage-section hidden" id="transactionCategoryManageSection">
+                <div class="category-manage-section-header">
+                    <p>Manage income and expense categories used inside transactions for the selected main category.</p>
+                </div>
+                <div class="category-management-tabs">
+                    <button class="category-mgmt-tab active" data-tab="expense" onclick="switchCategoryMgmtTab('expense')">
+                        <i class="fas fa-arrow-down"></i> Expense Categories
+                    </button>
+                    <button class="category-mgmt-tab" data-tab="income" onclick="switchCategoryMgmtTab('income')">
+                        <i class="fas fa-arrow-up"></i> Income Categories
+                    </button>
+                </div>
+                <div class="category-mgmt-content">
+                    <div class="category-mgmt-list" id="expenseCategoryList" data-type="expense">
+                        <!-- Expense categories will be populated here -->
+                    </div>
+                    <div class="category-mgmt-list hidden" id="incomeCategoryList" data-type="income">
+                        <!-- Income categories will be populated here -->
+                    </div>
+                </div>
+                <div class="form-group category-shared-toggle-group">
+                    <label for="sharedTxnCategoriesToggle" style="text-transform: none; letter-spacing: 0;">
+                        <input type="checkbox" id="sharedTxnCategoriesToggle" style="margin-right: 0.5rem;">
+                        Use common categories for both Expense and Income in this main category
+                    </label>
+                    <small id="sharedTxnCategoriesHint" style="color: var(--text-secondary); display: block; margin-top: 0.35rem;"></small>
+                </div>
+                <div class="category-mgmt-actions">
+                    <button type="button" class="btn-secondary" id="addCategoryBtn" onclick="promptAddCategory()">
+                        <i class="fas fa-plus"></i> Add Transaction Category
+                    </button>
+                </div>
             </div>
         </div>
     </div>

@@ -59,11 +59,13 @@ async function handleAuthCallback() {
 let currentUser = null;
 // Updated data structure for categories
 let categories = {
-    'daily': { name: 'Daily Expenses', icon: 'fas fa-calendar-day', transactions: [] }
+    'daily': { name: 'Daily Expenses', icon: 'fas fa-calendar-day', colorTheme: 'none', transactions: [] }
 };
 let activeCategory = 'daily'; // Current active category
 let transactions = []; // Legacy support - will be phased out
 let currentView = 'all'; // Start with showing all transactions
+let currentTypeFilter = 'all'; // Filter by transaction type: 'all', 'income', 'expense'
+let currentBreakdownCategoryFilter = 'all'; // Filter by clicked breakdown category
 let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
 let comparisonChart = null; // Chart instance
@@ -112,6 +114,57 @@ const txnCategoryMap = {
     income: { label: 'Income', icon: '⬆️' }
 };
 
+// Used to infer category for legacy transactions that only stored income/expense.
+const EXPENSE_CATEGORY_KEYWORDS = {
+    food: ['food', 'lunch', 'dinner', 'breakfast', 'snack', 'meal', 'restaurant', 'zomato', 'swiggy', 'pizza', 'burger', 'biryani', 'tea', 'coffee', 'chai'],
+    travel: ['travel', 'trip', 'flight', 'hotel', 'booking', 'vacation', 'holiday', 'oyo', 'makemytrip'],
+    transport: ['uber', 'ola', 'auto', 'cab', 'petrol', 'diesel', 'fuel', 'bus', 'metro', 'train', 'parking', 'toll'],
+    shopping: ['amazon', 'flipkart', 'shopping', 'online', 'myntra', 'meesho', 'buy', 'purchase', 'shop'],
+    groceries: ['grocery', 'vegetables', 'fruits', 'milk', 'blinkit', 'bigbasket', 'zepto', 'instamart', 'provisions', 'rice', 'wheat', 'atta', 'oil', 'dmart'],
+    rent: ['rent', 'house', 'flat', 'apartment', 'society', 'maintenance', 'pg'],
+    utilities: ['electricity', 'water', 'gas', 'bill', 'wifi', 'internet', 'broadband', 'recharge', 'mobile', 'phone', 'jio', 'airtel', 'vi'],
+    health: ['doctor', 'hospital', 'medicine', 'pharmacy', 'medical', 'health', 'gym', 'lab', 'test', 'apollo', '1mg'],
+    education: ['school', 'college', 'course', 'tuition', 'book', 'fee', 'education', 'class', 'udemy', 'learn'],
+    entertainment: ['movie', 'netflix', 'hotstar', 'prime', 'spotify', 'youtube', 'game', 'play', 'subscription', 'fun', 'party'],
+    clothing: ['cloth', 'dress', 'shirt', 'shoe', 'wear', 'fashion', 'garment', 'jeans'],
+    personal: ['salon', 'spa', 'haircut', 'grooming', 'beauty', 'cosmetic', 'perfume'],
+    subscriptions: ['subscription', 'premium', 'membership', 'monthly', 'annual', 'plan'],
+    insurance: ['insurance', 'lic', 'policy', 'premium', 'cover', 'health insurance'],
+    gifts: ['gift', 'donation', 'charity', 'present', 'wedding', 'birthday'],
+    pets: ['pet', 'dog', 'cat', 'vet', 'animal']
+};
+
+const INCOME_CATEGORY_KEYWORDS = {
+    salary: ['salary', 'wages', 'pay', 'payroll', 'ctc'],
+    freelance: ['freelance', 'project', 'gig', 'client', 'consulting', 'contract'],
+    business: ['business', 'profit', 'revenue', 'sales', 'commission'],
+    investments: ['invest', 'dividend', 'interest', 'return', 'mutual fund', 'stock', 'sip', 'fd', 'fixed deposit'],
+    rental_income: ['rental income', 'rent received', 'tenant'],
+    refund: ['refund', 'cashback', 'return', 'reversal']
+};
+
+function detectTransactionCategory(transaction) {
+    const cat = transaction.category;
+
+    // Keep explicit category only when it matches transaction type.
+    if (cat && cat !== 'expense' && cat !== 'income') {
+        const isExpenseCategory = expenseCategories.some(c => c.value === cat) || !!EXPENSE_CATEGORY_KEYWORDS[cat];
+        const isIncomeCategory = incomeCategories.some(c => c.value === cat) || !!INCOME_CATEGORY_KEYWORDS[cat];
+
+        if (transaction.type === 'income' && isIncomeCategory && !isExpenseCategory) return cat;
+        if (transaction.type === 'expense' && isExpenseCategory && !isIncomeCategory) return cat;
+        if (isIncomeCategory && isExpenseCategory) return cat;
+    }
+
+    const desc = (transaction.description || '').toLowerCase();
+    const keywordsMap = transaction.type === 'income' ? INCOME_CATEGORY_KEYWORDS : EXPENSE_CATEGORY_KEYWORDS;
+    for (const [key, keywords] of Object.entries(keywordsMap)) {
+        if (keywords.some(kw => desc.includes(kw))) return key;
+    }
+
+    return transaction.type === 'income' ? 'other_income' : 'other_expense';
+}
+
 function getCategoryLabel(category) {
     return txnCategoryMap[category]?.label || category || 'Uncategorized';
 }
@@ -120,8 +173,8 @@ function getCategoryIcon(category) {
     return txnCategoryMap[category]?.icon || (category === 'income' ? '⬆️' : '⬇️');
 }
 
-// Expense & Income category definitions
-const expenseCategories = [
+// Expense & Income category definitions (user-customizable)
+const DEFAULT_EXPENSE_CATEGORIES = [
     { value: 'food', label: '🍔 Food & Dining' },
     { value: 'travel', label: '✈️ Travel' },
     { value: 'transport', label: '🚗 Transport' },
@@ -143,7 +196,7 @@ const expenseCategories = [
     { value: 'other_expense', label: '📦 Other Expense' }
 ];
 
-const incomeCategories = [
+const DEFAULT_INCOME_CATEGORIES = [
     { value: 'salary', label: '💰 Salary' },
     { value: 'freelance', label: '💻 Freelance' },
     { value: 'business', label: '📈 Business' },
@@ -154,12 +207,181 @@ const incomeCategories = [
     { value: 'other_income', label: '🪙 Other Income' }
 ];
 
+let expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+let incomeCategories = [...DEFAULT_INCOME_CATEGORIES];
+let txnCategoriesSharedMode = false;
+
+function getTxnCategoryStorageKey() {
+    const userKey = currentUserId || 'guest';
+    const categoryKey = activeCategory || 'daily';
+    return `txn_categories_${userKey}_${categoryKey}`;
+}
+
+function getReadableTxnCategoryLabel(value) {
+    if (!value) return 'Uncategorized';
+    return value
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function saveTxnCategoriesToLocalStorage() {
+    const key = getTxnCategoryStorageKey();
+    const payload = {
+        expenseCategories,
+        incomeCategories,
+        sharedMode: txnCategoriesSharedMode
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+}
+
+function getCategoriesForType(type) {
+    if (txnCategoriesSharedMode) return expenseCategories;
+    return type === 'income' ? incomeCategories : expenseCategories;
+}
+
+function applySharedCategoryMode(enabled, save = true) {
+    txnCategoriesSharedMode = !!enabled;
+
+    if (txnCategoriesSharedMode) {
+        const mergedMap = new Map();
+        [...expenseCategories, ...incomeCategories].forEach(cat => {
+            if (!mergedMap.has(cat.value)) {
+                mergedMap.set(cat.value, { value: cat.value, label: cat.label });
+            }
+        });
+        const merged = Array.from(mergedMap.values());
+        expenseCategories = merged.map(c => ({ ...c }));
+        incomeCategories = merged.map(c => ({ ...c }));
+    }
+
+    ensureTxnCategoryMapEntries();
+    if (save) saveTxnCategoriesToLocalStorage();
+}
+
+function ensureTxnCategoryMapEntries() {
+    expenseCategories.forEach(cat => {
+        if (!txnCategoryMap[cat.value]) {
+            txnCategoryMap[cat.value] = { label: getReadableTxnCategoryLabel(cat.value), icon: '⬇️' };
+        }
+    });
+    incomeCategories.forEach(cat => {
+        if (!txnCategoryMap[cat.value]) {
+            txnCategoryMap[cat.value] = { label: getReadableTxnCategoryLabel(cat.value), icon: '⬆️' };
+        }
+    });
+}
+
+function loadTxnCategoriesFromLocalStorage() {
+    const key = getTxnCategoryStorageKey();
+    let raw = localStorage.getItem(key);
+
+    // Backward compatibility: migrate old global key once into current top category.
+    if (!raw) {
+        const legacyKey = `txn_categories_${currentUserId || 'guest'}`;
+        const legacyRaw = localStorage.getItem(legacyKey);
+        if (legacyRaw) {
+            raw = legacyRaw;
+            localStorage.setItem(key, legacyRaw);
+        }
+    }
+
+    if (!raw) {
+        ensureTxnCategoryMapEntries();
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.expenseCategories) && parsed.expenseCategories.length > 0) {
+            expenseCategories = parsed.expenseCategories;
+        }
+        if (Array.isArray(parsed.incomeCategories) && parsed.incomeCategories.length > 0) {
+            incomeCategories = parsed.incomeCategories;
+        }
+        txnCategoriesSharedMode = !!parsed.sharedMode;
+        if (txnCategoriesSharedMode) {
+            applySharedCategoryMode(true, false);
+        }
+        ensureTxnCategoryMapEntries();
+    } catch (error) {
+        console.error('❌ Failed to parse saved transaction categories:', error);
+        expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+        incomeCategories = [...DEFAULT_INCOME_CATEGORIES];
+        txnCategoriesSharedMode = false;
+        ensureTxnCategoryMapEntries();
+    }
+}
+
+function normalizeTxnCategoryValue(name) {
+    return name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s_-]/g, '')
+        .replace(/\s+/g, '_');
+}
+
+function addCustomTxnCategory(type, name) {
+    const normalized = normalizeTxnCategoryValue(name);
+    if (!normalized) {
+        showToast('Category name is required', 'error');
+        return false;
+    }
+
+    const collection = getCategoriesForType(type);
+    const exists = collection.some(c => c.value === normalized);
+    if (exists) {
+        showToast('Category already exists', 'warning');
+        return false;
+    }
+
+    const label = getReadableTxnCategoryLabel(normalized);
+    collection.push({ value: normalized, label });
+
+    if (txnCategoriesSharedMode) {
+        const clone = { value: normalized, label };
+        if (!incomeCategories.some(c => c.value === normalized)) incomeCategories.push(clone);
+        if (!expenseCategories.some(c => c.value === normalized)) expenseCategories.push(clone);
+    }
+
+    txnCategoryMap[normalized] = {
+        label,
+        icon: type === 'income' ? '⬆️' : '⬇️'
+    };
+
+    saveTxnCategoriesToLocalStorage();
+    return normalized;
+}
+
+function deleteCustomTxnCategory(type, value) {
+    const collection = getCategoriesForType(type);
+    if (collection.length <= 1) {
+        showToast('At least one category must remain', 'warning');
+        return false;
+    }
+
+    if (txnCategoriesSharedMode) {
+        if (expenseCategories.length <= 1 || incomeCategories.length <= 1) {
+            showToast('At least one category must remain', 'warning');
+            return false;
+        }
+        expenseCategories = expenseCategories.filter(c => c.value !== value);
+        incomeCategories = incomeCategories.filter(c => c.value !== value);
+    } else {
+        const index = collection.findIndex(c => c.value === value);
+        if (index === -1) return false;
+        collection.splice(index, 1);
+    }
+
+    saveTxnCategoriesToLocalStorage();
+    return true;
+}
+
 // Populate category select based on type
 function populateCategorySelect(selectId, type, preserveValue) {
     const select = document.getElementById(selectId);
     if (!select) return;
     
-    const cats = type === 'income' ? incomeCategories : expenseCategories;
+    const cats = getCategoriesForType(type);
     const oldValue = preserveValue || select.value;
     
     select.innerHTML = '';
@@ -185,6 +407,9 @@ function populateCategorySelect(selectId, type, preserveValue) {
 function setupCategoryTypeSync() {
     const typeSelect = document.getElementById('type');
     const catSelect = document.getElementById('txnCategory');
+    const editTypeSelect = document.getElementById('editType');
+    const editCatSelect = document.getElementById('editTxnCategory');
+
     if (typeSelect && catSelect) {
         // Populate on load
         populateCategorySelect('txnCategory', typeSelect.value);
@@ -192,9 +417,47 @@ function setupCategoryTypeSync() {
         typeSelect.addEventListener('change', () => {
             populateCategorySelect('txnCategory', typeSelect.value);
         });
+
+        const addTxnCategoryBtn = document.getElementById('addTxnCategoryBtn');
+        const deleteTxnCategoryBtn = document.getElementById('deleteTxnCategoryBtn');
+
+        if (addTxnCategoryBtn) {
+            addTxnCategoryBtn.addEventListener('click', () => {
+                const userInput = prompt(`Add new ${typeSelect.value} category:`);
+                if (!userInput) return;
+
+                const addedValue = addCustomTxnCategory(typeSelect.value, userInput);
+                if (!addedValue) return;
+
+                populateCategorySelect('txnCategory', typeSelect.value, addedValue);
+                if (editTypeSelect && editCatSelect) {
+                    populateCategorySelect('editTxnCategory', editTypeSelect.value, editCatSelect.value);
+                }
+                showToast('Category added', 'success');
+            });
+        }
+
+        if (deleteTxnCategoryBtn) {
+            deleteTxnCategoryBtn.addEventListener('click', () => {
+                const selectedValue = catSelect.value;
+                if (!selectedValue) return;
+                const selectedLabel = getCategoryLabel(selectedValue);
+
+                const confirmed = confirm(`Delete category "${selectedLabel}" from ${typeSelect.value}?`);
+                if (!confirmed) return;
+
+                const deleted = deleteCustomTxnCategory(typeSelect.value, selectedValue);
+                if (!deleted) return;
+
+                populateCategorySelect('txnCategory', typeSelect.value);
+                if (editTypeSelect && editCatSelect) {
+                    populateCategorySelect('editTxnCategory', editTypeSelect.value, editCatSelect.value);
+                }
+                showToast('Category deleted', 'info');
+            });
+        }
     }
-    const editTypeSelect = document.getElementById('editType');
-    const editCatSelect = document.getElementById('editTxnCategory');
+
     if (editTypeSelect && editCatSelect) {
         // Populate on load
         populateCategorySelect('editTxnCategory', editTypeSelect.value);
@@ -202,7 +465,135 @@ function setupCategoryTypeSync() {
         editTypeSelect.addEventListener('change', () => {
             populateCategorySelect('editTxnCategory', editTypeSelect.value);
         });
+
+        const addEditTxnCategoryBtn = document.getElementById('addEditTxnCategoryBtn');
+        const deleteEditTxnCategoryBtn = document.getElementById('deleteEditTxnCategoryBtn');
+
+        if (addEditTxnCategoryBtn) {
+            addEditTxnCategoryBtn.addEventListener('click', () => {
+                const userInput = prompt(`Add new ${editTypeSelect.value} category:`);
+                if (!userInput) return;
+
+                const addedValue = addCustomTxnCategory(editTypeSelect.value, userInput);
+                if (!addedValue) return;
+
+                populateCategorySelect('editTxnCategory', editTypeSelect.value, addedValue);
+                if (typeSelect && catSelect) {
+                    populateCategorySelect('txnCategory', typeSelect.value, catSelect.value);
+                }
+                showToast('Category added', 'success');
+            });
+        }
+
+        if (deleteEditTxnCategoryBtn) {
+            deleteEditTxnCategoryBtn.addEventListener('click', () => {
+                const selectedValue = editCatSelect.value;
+                if (!selectedValue) return;
+                const selectedLabel = getCategoryLabel(selectedValue);
+
+                const confirmed = confirm(`Delete category "${selectedLabel}" from ${editTypeSelect.value}?`);
+                if (!confirmed) return;
+
+                const deleted = deleteCustomTxnCategory(editTypeSelect.value, selectedValue);
+                if (!deleted) return;
+
+                populateCategorySelect('editTxnCategory', editTypeSelect.value);
+                if (typeSelect && catSelect) {
+                    populateCategorySelect('txnCategory', typeSelect.value, catSelect.value);
+                }
+                showToast('Category deleted', 'info');
+            });
+        }
     }
+}
+
+function initWorkbenchLayoutControls() {
+    const workbench = document.getElementById('expenseWorkbench');
+    const divider = document.getElementById('expenseWorkbenchDivider');
+    const collapsible = document.getElementById('addTransactionCollapsible');
+    const toggleBtn = document.getElementById('toggleAddTransactionBtn');
+    if (!workbench) return;
+
+    // Add Transaction collapsed by default (persisted)
+    if (collapsible && toggleBtn) {
+        const savedCollapsed = localStorage.getItem('add_txn_collapsed');
+        const isCollapsed = savedCollapsed === null ? true : savedCollapsed === 'true';
+        collapsible.classList.toggle('collapsed', isCollapsed);
+        toggleBtn.setAttribute('aria-expanded', String(!isCollapsed));
+
+        toggleBtn.addEventListener('click', () => {
+            const nowCollapsed = !collapsible.classList.contains('collapsed');
+            collapsible.classList.toggle('collapsed', nowCollapsed);
+            toggleBtn.setAttribute('aria-expanded', String(!nowCollapsed));
+            localStorage.setItem('add_txn_collapsed', String(nowCollapsed));
+        });
+    }
+
+    // Nested Paste & Auto-Add section collapsed by default (persisted)
+    const pasteCard = document.getElementById('pasteAutoAddCard');
+    const pasteToggleBtn = document.getElementById('togglePasteCardBtn');
+    const pasteToggleLabel = document.getElementById('pasteToggleLabel');
+
+    if (pasteCard && pasteToggleBtn) {
+        const applyPasteCardState = (collapsed) => {
+            pasteCard.classList.toggle('collapsed', collapsed);
+            pasteToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+            if (pasteToggleLabel) {
+                pasteToggleLabel.textContent = collapsed ? 'Show' : 'Hide';
+            }
+        };
+
+        const savedPasteCollapsed = localStorage.getItem('paste_auto_add_collapsed');
+        const isPasteCollapsed = savedPasteCollapsed === null ? true : savedPasteCollapsed === 'true';
+        applyPasteCardState(isPasteCollapsed);
+
+        pasteToggleBtn.addEventListener('click', () => {
+            const nowCollapsed = !pasteCard.classList.contains('collapsed');
+            applyPasteCardState(nowCollapsed);
+            localStorage.setItem('paste_auto_add_collapsed', String(nowCollapsed));
+        });
+    }
+
+    // Draggable divider (desktop only)
+    if (!divider) return;
+
+    const savedWidth = localStorage.getItem('workbench_left_width');
+    if (savedWidth) {
+        workbench.style.setProperty('--left-panel-width', savedWidth);
+    }
+
+    let dragging = false;
+
+    const onMove = (event) => {
+        if (!dragging) return;
+        const rect = workbench.getBoundingClientRect();
+        if (rect.width <= 0) return;
+
+        const x = event.clientX - rect.left;
+        const pct = (x / rect.width) * 100;
+        const clamped = Math.max(35, Math.min(65, pct));
+        const widthValue = `${clamped.toFixed(2)}%`;
+
+        workbench.style.setProperty('--left-panel-width', widthValue);
+        localStorage.setItem('workbench_left_width', widthValue);
+    };
+
+    const stopDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        workbench.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', stopDrag);
+    };
+
+    divider.addEventListener('mousedown', (event) => {
+        if (window.innerWidth <= 1024) return;
+        event.preventDefault();
+        dragging = true;
+        workbench.classList.add('resizing');
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', stopDrag);
+    });
 }
 
 // Initialize the application
@@ -1308,6 +1699,7 @@ function setupEventListeners() {
             
             const name = document.getElementById('categoryName').value.trim();
             const selectedIcon = document.querySelector('.icon-option.active')?.getAttribute('data-icon') || 'fas fa-wallet';
+            const selectedColorTheme = document.querySelector('.color-theme-option.active')?.getAttribute('data-color-theme') || 'none';
             const editingId = categoryForm.getAttribute('data-editing');
             
             if (!name) {
@@ -1320,6 +1712,7 @@ function setupEventListeners() {
                 if (categories[editingId]) {
                     categories[editingId].name = name;
                     categories[editingId].icon = selectedIcon;
+                    categories[editingId].colorTheme = selectedColorTheme;
                     await saveCategories();
                     updateCategoryTabs();
                     updateCategoryList();
@@ -1329,22 +1722,68 @@ function setupEventListeners() {
                 }
             } else {
                 // Add new category
-                if (await addCategory(name, selectedIcon)) {
+                if (await addCategory(name, selectedIcon, selectedColorTheme)) {
                     closeCategoryModal();
                 }
             }
         });
     }
     
-    // Setup category-type sync for transaction forms
+    // Load saved transaction categories, then setup category-type sync for forms
+    loadTxnCategoriesFromLocalStorage();
+    loadBreakdownTabPreference();
     setupCategoryTypeSync();
-    
+    initWorkbenchLayoutControls();
+
+    // Update category type labels on type change
+    const typeSelect = document.getElementById('type');
+    const editTypeSelect = document.getElementById('editType');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', updateCategoryTypeLabel);
+        updateCategoryTypeLabel(); // Initialize on page load
+    }
+    if (editTypeSelect) {
+        editTypeSelect.addEventListener('change', updateCategoryTypeLabel);
+    }
+
+    const sharedTxnCategoriesToggle = document.getElementById('sharedTxnCategoriesToggle');
+    if (sharedTxnCategoriesToggle) {
+        sharedTxnCategoriesToggle.checked = txnCategoriesSharedMode;
+        sharedTxnCategoriesToggle.addEventListener('change', () => {
+            applySharedCategoryMode(sharedTxnCategoriesToggle.checked);
+
+            const typeSelectEl = document.getElementById('type');
+            if (typeSelectEl) {
+                populateCategorySelect('txnCategory', typeSelectEl.value);
+            }
+
+            const editTypeSelectEl = document.getElementById('editType');
+            if (editTypeSelectEl) {
+                populateCategorySelect('editTxnCategory', editTypeSelectEl.value);
+            }
+
+            updateCategoryTypeLabel();
+            updateSharedCategoryModeUI();
+            switchCategoryMgmtTab('expense');
+            showToast(sharedTxnCategoriesToggle.checked ? 'Shared categories enabled' : 'Shared categories disabled', 'info');
+        });
+    }
     // Icon selector
     const iconOptions = document.querySelectorAll('.icon-option');
     iconOptions.forEach(option => {
         option.addEventListener('click', (e) => {
             e.preventDefault();
             iconOptions.forEach(opt => opt.classList.remove('active'));
+            option.classList.add('active');
+        });
+    });
+    
+    // Color theme selector for category modal
+    const colorThemeOptions = document.querySelectorAll('.color-theme-option');
+    colorThemeOptions.forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.preventDefault();
+            colorThemeOptions.forEach(opt => opt.classList.remove('active'));
             option.classList.add('active');
         });
     });
@@ -2598,6 +3037,19 @@ function switchCategory(categoryId) {
     // Update active category
     activeCategory = categoryId;
     persistActiveCategory();
+
+    // Load transaction categories scoped to the selected top category.
+    loadTxnCategoriesFromLocalStorage();
+    loadBreakdownTabPreference();
+    
+    // Apply category-specific color theme if set
+    const categoryColorTheme = categories[categoryId].colorTheme;
+    if (categoryColorTheme && categoryColorTheme !== 'none') {
+        applyCategoryColorTheme(categoryColorTheme);
+    } else {
+        // Remove color theme when switching to a category with no theme
+        removeCategoryColorTheme();
+    }
     
     // Update UI
     document.querySelectorAll('.category-tab').forEach(tab => {
@@ -2614,6 +3066,19 @@ function switchCategory(categoryId) {
     
     // Load transactions for this category
     transactions = categories[activeCategory].transactions;
+
+    // Refresh category selects to match the selected top category's category set.
+    const typeSelect = document.getElementById('type');
+    if (typeSelect) {
+        populateCategorySelect('txnCategory', typeSelect.value);
+    }
+    const editTypeSelect = document.getElementById('editType');
+    if (editTypeSelect) {
+        populateCategorySelect('editTxnCategory', editTypeSelect.value);
+    }
+    if (typeof updateCategoryTypeLabel === 'function') {
+        updateCategoryTypeLabel();
+    }
     
     // Update the UI
     updateUI();
@@ -2634,7 +3099,44 @@ function switchCategory(categoryId) {
     console.log(`🔄 Switched to category: ${categories[activeCategory].name}`);
 }
 
-async function addCategory(name, icon) {
+// Apply category-specific color theme
+function applyCategoryColorTheme(colorTheme) {
+    // Add smooth transition class
+    document.body.classList.add('theme-switching');
+    
+    // Apply the color theme
+    document.documentElement.setAttribute('data-color-theme', colorTheme);
+    
+    // Special handling for midnight theme (it's a dark theme)
+    if (colorTheme === 'midnight') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        updateThemeIcon('dark');
+    }
+    
+    console.log(`🎨 Applied category color theme: ${colorTheme}`);
+    
+    // Remove transition class after animation
+    setTimeout(() => {
+        document.body.classList.remove('theme-switching');
+    }, 400);
+}
+
+// Remove category color theme (revert to user's preferred theme)
+function removeCategoryColorTheme() {
+    document.body.classList.add('theme-switching');
+    document.documentElement.removeAttribute('data-color-theme');
+    
+    // Restore user's saved theme preference
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+    
+    setTimeout(() => {
+        document.body.classList.remove('theme-switching');
+    }, 400);
+}
+
+async function addCategory(name, icon, colorTheme = 'none') {
     const categoryId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     if (categories[categoryId]) {
         showToast('Category already exists!', 'error');
@@ -2644,6 +3146,7 @@ async function addCategory(name, icon) {
     categories[categoryId] = {
         name: name,
         icon: icon,
+        colorTheme: colorTheme,
         transactions: []
     };
     
@@ -3015,6 +3518,14 @@ function openCategoryModal() {
     document.querySelectorAll('.icon-option').forEach(option => option.classList.remove('active'));
     document.querySelector('.icon-option').classList.add('active');
     
+    // Reset color theme selection to 'none' (Default)
+    document.querySelectorAll('.color-theme-option').forEach(option => option.classList.remove('active'));
+    const defaultThemeOption = document.querySelector('.color-theme-option[data-color-theme="none"]');
+    if (defaultThemeOption) defaultThemeOption.classList.add('active');
+    
+    // Clear any editing state
+    document.getElementById('categoryForm').removeAttribute('data-editing');
+    
     document.getElementById('categoryModal').style.display = 'flex';
 }
 
@@ -3023,12 +3534,40 @@ function closeCategoryModal() {
 }
 
 function openCategoryManageModal() {
+    const modal = document.getElementById('categoryManageModal');
+    if (!modal) return;
+
     updateCategoryList();
-    document.getElementById('categoryManageModal').style.display = 'flex';
+    modal.style.display = 'flex';
+    updateSharedCategoryModeUI();
+    switchCategoryManageMode('main');
 }
 
 function closeCategoryManageModal() {
     document.getElementById('categoryManageModal').style.display = 'none';
+}
+
+function switchCategoryManageMode(mode) {
+    const tabs = document.querySelectorAll('.category-manage-mode-tab');
+    tabs.forEach(tab => {
+        const isActive = tab.getAttribute('data-mode') === mode;
+        tab.classList.toggle('active', isActive);
+    });
+
+    const mainSection = document.getElementById('mainCategoryManageSection');
+    const transactionSection = document.getElementById('transactionCategoryManageSection');
+
+    if (mode === 'transaction') {
+        mainSection?.classList.add('hidden');
+        transactionSection?.classList.remove('hidden');
+        updateSharedCategoryModeUI();
+        switchCategoryMgmtTab('expense');
+        return;
+    }
+
+    mainSection?.classList.remove('hidden');
+    transactionSection?.classList.add('hidden');
+    updateCategoryList();
 }
 
 function updateCategoryTabs() {
@@ -3122,6 +3661,15 @@ function editCategory(categoryId) {
         }
     });
     
+    // Set color theme selection
+    const categoryColorTheme = category.colorTheme || 'none';
+    document.querySelectorAll('.color-theme-option').forEach(option => {
+        option.classList.remove('active');
+        if (option.getAttribute('data-color-theme') === categoryColorTheme) {
+            option.classList.add('active');
+        }
+    });
+    
     // Store editing category ID
     document.getElementById('categoryForm').setAttribute('data-editing', categoryId);
     document.getElementById('categoryModal').style.display = 'flex';
@@ -3137,16 +3685,185 @@ function updateUI() {
     updateTransactionCount();
     updateComparisonChart();
     updateCategoryBreakdown();
+    updateFilterCardState();
+    updateInteractionGuide();
+}
+
+// Update the active state of filter cards based on currentTypeFilter
+function updateFilterCardState() {
+    const incomeCard = document.getElementById('incomeCard');
+    const expenseCard = document.getElementById('expenseCard');
+    const balanceCard = document.getElementById('balanceCard');
+    
+    [incomeCard, expenseCard, balanceCard].forEach(card => {
+        if (card) card.classList.remove('filter-active');
+    });
+    
+    if (currentTypeFilter === 'income' && incomeCard) {
+        incomeCard.classList.add('filter-active');
+    } else if (currentTypeFilter === 'expense' && expenseCard) {
+        expenseCard.classList.add('filter-active');
+    } else if (currentTypeFilter === 'all' && balanceCard) {
+        balanceCard.classList.add('filter-active');
+    }
+}
+
+function updateInteractionGuide() {
+    const guide = document.getElementById('interactionGuide');
+    const guideText = document.getElementById('interactionGuideText');
+    const incomeCard = document.getElementById('incomeCard');
+    const expenseCard = document.getElementById('expenseCard');
+    const balanceCard = document.getElementById('balanceCard');
+
+    if (incomeCard) {
+        incomeCard.title = currentTypeFilter === 'income'
+            ? 'Showing income only. Click again to return to normal view.'
+            : 'Click to show only income transactions';
+    }
+    if (expenseCard) {
+        expenseCard.title = currentTypeFilter === 'expense'
+            ? 'Showing expenses only. Click again to return to normal view.'
+            : 'Click to show only expense transactions';
+    }
+    if (balanceCard) {
+        balanceCard.title = 'Click to show all transactions (normal view)';
+    }
+
+    if (!guide || !guideText) return;
+
+    if (currentBreakdownCategoryFilter !== 'all') {
+        const label = getCategoryLabel(currentBreakdownCategoryFilter);
+        guide.classList.add('active');
+        guideText.textContent = `Filtered by ${label}. Click the same breakdown row again to return to normal view.`;
+        return;
+    }
+
+    if (currentTypeFilter === 'income') {
+        guide.classList.add('active');
+        guideText.textContent = 'Income filter active. Click Income again or click Balance to return to normal view.';
+        return;
+    }
+
+    if (currentTypeFilter === 'expense') {
+        guide.classList.add('active');
+        guideText.textContent = 'Expense filter active. Click Expenses again or click Balance to return to normal view.';
+        return;
+    }
+
+    guide.classList.remove('active');
+    guideText.textContent = 'Tip: Click Income, Expenses, or a Breakdown category to filter. Click same item again to return to normal view.';
+}
+
+function resetToNormalMode() {
+    currentTypeFilter = 'all';
+    currentBreakdownCategoryFilter = 'all';
+    updateUI();
+    showToast('Returned to normal mode', 'info');
+}
+
+function resetToAllTransactionsMode() {
+    currentTypeFilter = 'all';
+    currentBreakdownCategoryFilter = 'all';
+    currentView = 'all';
+    customStartDate = null;
+    customEndDate = null;
+
+    const customRangeSection = document.getElementById('customRangeSection');
+    if (customRangeSection) {
+        customRangeSection.style.display = 'none';
+    }
+
+    document.querySelectorAll('.quick-period-btn').forEach(btn => btn.classList.remove('active'));
+    const allBtn = document.querySelector('.all-transactions-btn');
+    if (allBtn) allBtn.classList.add('active');
+
+    updateUI();
+    showToast('Switched to all transactions', 'success');
+}
+
+function hideFilterActionPopup() {
+    const popup = document.getElementById('filterActionPopup');
+    if (!popup) return;
+    popup.classList.remove('show');
+}
+
+function showFilterActionPopup(contextText) {
+    let popup = document.getElementById('filterActionPopup');
+
+    if (!popup) {
+        popup = document.createElement('div');
+        popup.id = 'filterActionPopup';
+        popup.className = 'filter-action-popup';
+        popup.innerHTML = `
+            <div class="filter-action-popup-content">
+                <div class="filter-action-popup-title"><i class="fas fa-filter"></i> Filter Active</div>
+                <div class="filter-action-popup-text" id="filterActionPopupText"></div>
+                <div class="filter-action-popup-buttons">
+                    <button type="button" class="filter-popup-btn" id="popupNormalModeBtn">Normal Mode</button>
+                    <button type="button" class="filter-popup-btn primary" id="popupAllTxnBtn">All Transactions</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        const normalBtn = popup.querySelector('#popupNormalModeBtn');
+        const allTxnBtn = popup.querySelector('#popupAllTxnBtn');
+
+        if (normalBtn) {
+            normalBtn.addEventListener('click', () => {
+                resetToNormalMode();
+                hideFilterActionPopup();
+            });
+        }
+
+        if (allTxnBtn) {
+            allTxnBtn.addEventListener('click', () => {
+                resetToAllTransactionsMode();
+                hideFilterActionPopup();
+            });
+        }
+    }
+
+    const textEl = popup.querySelector('#filterActionPopupText');
+    if (textEl) {
+        textEl.textContent = contextText || 'Choose quick action:';
+    }
+
+    popup.classList.add('show');
 }
 
 // Category Breakdown Feature
 let activeBreakdownTab = 'expense';
 
+function getBreakdownTabStorageKey() {
+    const userKey = currentUserId || 'guest';
+    const categoryKey = activeCategory || 'daily';
+    return `breakdown_tab_${userKey}_${categoryKey}`;
+}
+
+function loadBreakdownTabPreference() {
+    const saved = localStorage.getItem(getBreakdownTabStorageKey());
+    if (saved === 'expense' || saved === 'income' || saved === 'common') {
+        activeBreakdownTab = saved;
+    } else {
+        activeBreakdownTab = 'expense';
+    }
+}
+
+function saveBreakdownTabPreference() {
+    localStorage.setItem(getBreakdownTabStorageKey(), activeBreakdownTab);
+}
+
+function syncBreakdownTabUI() {
+    document.querySelectorAll('.breakdown-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.getAttribute('data-breakdown') === activeBreakdownTab);
+    });
+}
+
 function switchBreakdownTab(type) {
     activeBreakdownTab = type;
-    document.querySelectorAll('.breakdown-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.getAttribute('data-breakdown') === type);
-    });
+    saveBreakdownTabPreference();
+    syncBreakdownTabUI();
     updateCategoryBreakdown();
 }
 
@@ -3154,7 +3871,89 @@ function updateCategoryBreakdown() {
     const container = document.getElementById('categoryBreakdownBody');
     if (!container) return;
 
+    syncBreakdownTabUI();
+
     const filtered = getFilteredTransactions();
+
+    if (activeBreakdownTab === 'common') {
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="breakdown-empty">
+                    <i class="fas fa-chart-pie"></i>
+                    <p>No transactions in this period</p>
+                </div>`;
+            return;
+        }
+
+        const catTotals = {};
+        filtered.forEach(t => {
+            const cat = detectTransactionCategory(t);
+            if (!catTotals[cat]) {
+                catTotals[cat] = {
+                    expenseTotal: 0,
+                    incomeTotal: 0,
+                    expenseCount: 0,
+                    incomeCount: 0,
+                    transactions: []
+                };
+            }
+
+            if (t.type === 'expense') {
+                catTotals[cat].expenseTotal += t.amount;
+                catTotals[cat].expenseCount++;
+            } else if (t.type === 'income') {
+                catTotals[cat].incomeTotal += t.amount;
+                catTotals[cat].incomeCount++;
+            }
+            catTotals[cat].transactions.push(t);
+        });
+
+        const sorted = Object.entries(catTotals).sort((a, b) => {
+            const netA = a[1].expenseTotal - a[1].incomeTotal;
+            const netB = b[1].expenseTotal - b[1].incomeTotal;
+            return Math.abs(netB) - Math.abs(netA);
+        });
+
+        const totalOutstanding = sorted.reduce((sum, [, d]) => sum + (d.expenseTotal - d.incomeTotal), 0);
+        const maxAbs = Math.max(1, ...sorted.map(([, d]) => Math.abs(d.expenseTotal - d.incomeTotal)));
+
+        container.innerHTML = sorted.map(([cat, data]) => {
+            const net = data.expenseTotal - data.incomeTotal;
+            const absPct = ((Math.abs(net) / maxAbs) * 100).toFixed(1);
+            const icon = getCategoryIcon(cat);
+            const label = getCategoryLabel(cat);
+            const color = net >= 0 ? '#ef4444' : '#22c55e';
+            const firstTxnId = data.transactions.length ? data.transactions[0].id : '';
+            const isActive = currentBreakdownCategoryFilter === cat && currentTypeFilter === 'all';
+            const stateText = net > 0 ? 'Outstanding' : (net < 0 ? 'Returned More' : 'Settled');
+
+            return `
+            <div class="breakdown-item ${isActive ? 'active' : ''}" style="--bar-color: ${color}" onclick="filterByBreakdownCategory('${cat}', 'all', '${firstTxnId}')" title="Click to show all ${label} transactions together.">
+                <div class="breakdown-main-row">
+                    <div class="transaction-details">
+                        <div class="category-icon ${net >= 0 ? 'expense' : 'income'}">
+                            <span class="txn-cat-emoji">${icon}</span>
+                        </div>
+                        <div class="transaction-info">
+                            <h4>${label} <span class="txn-category-label ${net >= 0 ? 'cat-label-expense' : 'cat-label-income'}">${data.expenseCount + data.incomeCount} txn${(data.expenseCount + data.incomeCount) > 1 ? 's' : ''}</span></h4>
+                            <p>Given: ${formatCurrency(data.expenseTotal)} • Returned: ${formatCurrency(data.incomeTotal)} • ${stateText}</p>
+                        </div>
+                    </div>
+                    <div class="transaction-amount ${net >= 0 ? 'expense' : 'income'}">${formatCurrency(Math.abs(net))}</div>
+                </div>
+                <div class="breakdown-bar-track">
+                    <div class="breakdown-bar-fill" style="width: ${absPct}%; background: ${color}"></div>
+                </div>
+            </div>`;
+        }).join('') + `
+        <div class="breakdown-total-row">
+            <span class="breakdown-total-label">Overall Net</span>
+            <span class="breakdown-total-amount" style="color:${totalOutstanding >= 0 ? '#ef4444' : '#22c55e'}">${formatCurrency(Math.abs(totalOutstanding))}</span>
+        </div>`;
+
+        return;
+    }
+
     const typeTxns = filtered.filter(t => t.type === activeBreakdownTab);
 
     if (typeTxns.length === 0) {
@@ -3166,50 +3965,10 @@ function updateCategoryBreakdown() {
         return;
     }
 
-    // Smart category detection for old transactions
-    const categoryKeywords = {
-        food: ['food','lunch','dinner','breakfast','snack','meal','restaurant','zomato','swiggy','pizza','burger','biryani','tea','coffee','chai'],
-        travel: ['travel','trip','flight','hotel','booking','vacation','holiday','oyo','makemytrip'],
-        transport: ['uber','ola','auto','cab','petrol','diesel','fuel','bus','metro','train','parking','toll'],
-        shopping: ['amazon','flipkart','shopping','online','myntra','meesho','buy','purchase','shop'],
-        groceries: ['grocery','vegetables','fruits','milk','blinkit','bigbasket','zepto','instamart','provisions','rice','wheat','atta','oil','dmart'],
-        rent: ['rent','house','flat','apartment','society','maintenance','pg'],
-        utilities: ['electricity','water','gas','bill','wifi','internet','broadband','recharge','mobile','phone','jio','airtel','vi'],
-        health: ['doctor','hospital','medicine','pharmacy','medical','health','gym','lab','test','apollo','1mg'],
-        education: ['school','college','course','tuition','book','fee','education','class','udemy','learn'],
-        entertainment: ['movie','netflix','hotstar','prime','spotify','youtube','game','play','subscription','fun','party'],
-        clothing: ['cloth','dress','shirt','shoe','wear','fashion','garment','jeans'],
-        personal: ['salon','spa','haircut','grooming','beauty','cosmetic','perfume'],
-        subscriptions: ['subscription','premium','membership','monthly','annual','plan'],
-        insurance: ['insurance','lic','policy','premium','cover','health insurance'],
-        gifts: ['gift','donation','charity','present','wedding','birthday'],
-        pets: ['pet','dog','cat','vet','animal'],
-        salary: ['salary','wages','pay','payroll','ctc'],
-        freelance: ['freelance','project','gig','client','consulting','contract'],
-        business: ['business','profit','revenue','sales','commission'],
-        investments: ['invest','dividend','interest','return','mutual fund','stock','sip','fd','fixed deposit'],
-        rental_income: ['rental income','rent received','tenant'],
-        refund: ['refund','cashback','return','reversal']
-    };
-
-    function detectCategory(transaction) {
-        const cat = transaction.category;
-        // Already has a proper category (not just 'expense'/'income')
-        if (cat && cat !== 'expense' && cat !== 'income') return cat;
-        
-        // Try to detect from description
-        const desc = (transaction.description || '').toLowerCase();
-        for (const [key, keywords] of Object.entries(categoryKeywords)) {
-            if (keywords.some(kw => desc.includes(kw))) return key;
-        }
-        // Fallback
-        return transaction.type === 'income' ? 'other_income' : 'other_expense';
-    }
-
     // Group by detected category
     const catTotals = {};
     typeTxns.forEach(t => {
-        const cat = detectCategory(t);
+        const cat = detectTransactionCategory(t);
         if (!catTotals[cat]) catTotals[cat] = { total: 0, count: 0, transactions: [] };
         catTotals[cat].total += t.amount;
         catTotals[cat].count++;
@@ -3238,22 +3997,24 @@ function updateCategoryBreakdown() {
             .slice(0, 3)
             .map(t => t.description)
             .join(', ');
+        const topTxnId = data.transactions.length ? data.transactions[0].id : '';
+        const isActive = currentBreakdownCategoryFilter === cat && currentTypeFilter === activeBreakdownTab;
         return `
-        <div class="breakdown-item ${themeClass}" style="--bar-color: ${color}">
-            <div class="breakdown-item-header">
-                <div class="breakdown-cat-info">
-                    <span class="breakdown-icon">${icon}</span>
-                    <span class="breakdown-name">${label}</span>
-                    <span class="breakdown-count">${data.count} txn${data.count > 1 ? 's' : ''}</span>
+        <div class="breakdown-item ${themeClass} ${isActive ? 'active' : ''}" style="--bar-color: ${color}" onclick="filterByBreakdownCategory('${cat}', '${activeBreakdownTab}', '${topTxnId}')" title="Click to filter ${label} transactions. Click again to return to normal view.">
+            <div class="breakdown-main-row">
+                <div class="transaction-details">
+                    <div class="category-icon ${activeBreakdownTab}">
+                        <span class="txn-cat-emoji">${icon}</span>
+                    </div>
+                    <div class="transaction-info">
+                        <h4>${label} <span class="txn-category-label ${activeBreakdownTab === 'income' ? 'cat-label-income' : 'cat-label-expense'}">${data.count} txn${data.count > 1 ? 's' : ''}</span></h4>
+                        <p title="${topItems}">${topItems} • ${pct}%</p>
+                    </div>
                 </div>
-                <div class="breakdown-amount">${formatCurrency(data.total)}</div>
+                <div class="transaction-amount ${activeBreakdownTab}">${formatCurrency(data.total)}</div>
             </div>
             <div class="breakdown-bar-track">
                 <div class="breakdown-bar-fill" style="width: ${pct}%; background: ${color}"></div>
-            </div>
-            <div class="breakdown-footer">
-                <span class="breakdown-preview" title="${topItems}">${topItems}</span>
-                <span class="breakdown-pct">${pct}%</span>
             </div>
         </div>`;
     }).join('') + `
@@ -3261,6 +4022,34 @@ function updateCategoryBreakdown() {
         <span class="breakdown-total-label">Total ${activeBreakdownTab === 'expense' ? 'Expenses' : 'Income'}</span>
         <span class="breakdown-total-amount">${formatCurrency(grandTotal)}</span>
     </div>`;
+}
+
+function filterByBreakdownCategory(category, type, firstTransactionId) {
+    if (currentBreakdownCategoryFilter === category && currentTypeFilter === type) {
+        resetToNormalMode();
+        hideFilterActionPopup();
+        return;
+    }
+
+    currentTypeFilter = type;
+    currentBreakdownCategoryFilter = category;
+    updateUI();
+
+    requestAnimationFrame(() => {
+        if (firstTransactionId) {
+            const didScroll = scrollToTransactionById(firstTransactionId);
+            if (!didScroll) {
+                const transactionsSection = document.querySelector('.transactions-section');
+                if (transactionsSection) {
+                    transactionsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        }
+    });
+
+    const modeLabel = type === 'all' ? 'all (income + expense)' : type;
+    showToast(`Showing ${getCategoryLabel(category)} ${modeLabel} transactions`, 'success');
+    showFilterActionPopup(`Now showing ${getCategoryLabel(category)} ${modeLabel}. Click Normal Mode or All Transactions.`);
 }
 
 function updateCurrentPeriodDisplay() {
@@ -3536,7 +4325,7 @@ function renderTransactions() {
         const catIcon = getCategoryIcon(transaction.category);
         const catTheme = transaction.type === 'income' ? 'cat-label-income' : 'cat-label-expense';
         return `
-        <div class="transaction-item slide-up">
+        <div class="transaction-item slide-up" id="txn-${transaction.id}" data-transaction-id="${transaction.id}">
             <div class="transaction-details">
                 <div class="category-icon ${transaction.type}">
                     <span class="txn-cat-emoji">${catIcon}</span>
@@ -3559,6 +4348,8 @@ function renderTransactions() {
             </div>
         </div>
     `}).join('');
+
+    return sortedTransactions;
 }
 
 // Filtering
@@ -3618,8 +4409,88 @@ function getFilteredTransactions() {
         // filtered already contains all transactions, no additional filtering needed
     }
     
+    // Apply type filter (income/expense/all)
+    if (currentTypeFilter === 'income') {
+        filtered = filtered.filter(t => t.type === 'income');
+        console.log('💰 Filtered to income only:', filtered.length);
+    } else if (currentTypeFilter === 'expense') {
+        filtered = filtered.filter(t => t.type === 'expense');
+        console.log('💸 Filtered to expenses only:', filtered.length);
+    }
+
+    if (currentBreakdownCategoryFilter !== 'all') {
+        filtered = filtered.filter(t => detectTransactionCategory(t) === currentBreakdownCategoryFilter);
+        console.log('🧩 Filtered to category only:', currentBreakdownCategoryFilter, filtered.length);
+    }
+    
     console.log('✅ Final filtered transactions:', filtered.length);
     return filtered;
+}
+
+// Filter transactions by type (income/expense/all)
+function filterByType(type) {
+    const isToggleOff = type !== 'all' && currentTypeFilter === type && currentBreakdownCategoryFilter === 'all';
+
+    if (isToggleOff) {
+        resetToNormalMode();
+        hideFilterActionPopup();
+    } else {
+        currentTypeFilter = type;
+        // Summary-card click should switch out of breakdown-category focus.
+        currentBreakdownCategoryFilter = 'all';
+
+        if (type === 'income') {
+            showToast('Showing income transactions only', 'info');
+        } else if (type === 'expense') {
+            showToast('Showing expense transactions only', 'info');
+        } else {
+            showToast('Showing all transactions', 'info');
+        }
+    }
+
+    updateUI();
+    const sortedTransactions = getFilteredTransactions().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Auto-scroll to first visible transaction for this filter
+    requestAnimationFrame(() => {
+        if (sortedTransactions && sortedTransactions.length > 0) {
+            scrollToTransactionById(sortedTransactions[0].id);
+        } else {
+            const transactionsSection = document.querySelector('.transactions-section');
+            if (transactionsSection) {
+                transactionsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    });
+
+    if (!isToggleOff && type !== 'all') {
+        const label = type === 'income' ? 'income' : 'expense';
+        showFilterActionPopup(`Now showing ${label} transactions. Choose quick reset action.`);
+    } else {
+        hideFilterActionPopup();
+    }
+    
+    console.log(`🔍 Type filter set to: ${type}`);
+}
+
+// Scroll to a transaction row by id and highlight it briefly
+function scrollToTransactionById(transactionId) {
+    if (!transactionId) return false;
+
+    const transactionEl = document.querySelector(`.transaction-item[data-transaction-id="${transactionId}"]`);
+    if (!transactionEl) return false;
+
+    transactionEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    transactionEl.classList.remove('transaction-focus');
+    // Restart focus animation if the same card is clicked repeatedly.
+    void transactionEl.offsetWidth;
+    transactionEl.classList.add('transaction-focus');
+
+    setTimeout(() => {
+        transactionEl.classList.remove('transaction-focus');
+    }, 1800);
+
+    return true;
 }
 
 // Google Drive integration
@@ -4987,4 +5858,143 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+function updateCategoryTypeLabel() {
+    const typeSelect = document.getElementById('type');
+    const categoryTypeLabel = document.getElementById('categoryTypeLabel');
+    const editTypeSelect = document.getElementById('editType');
+    const editCategoryTypeLabel = document.getElementById('editCategoryTypeLabel');
+
+    const buildLabel = (type) => {
+        if (txnCategoriesSharedMode) return '🔗 Common Categories';
+        return type === 'expense' ? '📊 Expense Categories' : '💰 Income Categories';
+    };
+
+    if (typeSelect && categoryTypeLabel) {
+        categoryTypeLabel.textContent = buildLabel(typeSelect.value);
+        categoryTypeLabel.setAttribute('data-type', txnCategoriesSharedMode ? 'shared' : typeSelect.value);
+    }
+
+    if (editTypeSelect && editCategoryTypeLabel) {
+        editCategoryTypeLabel.textContent = buildLabel(editTypeSelect.value);
+        editCategoryTypeLabel.setAttribute('data-type', txnCategoriesSharedMode ? 'shared' : editTypeSelect.value);
+    }
+}
+
+function switchCategoryMgmtTab(tabType) {
+    const tabs = document.querySelectorAll('.category-mgmt-tab');
+    tabs.forEach(tab => {
+        const isActive = tab.getAttribute('data-tab') === tabType;
+        tab.classList.toggle('active', isActive);
+    });
+
+    const expenseList = document.getElementById('expenseCategoryList');
+    const incomeList = document.getElementById('incomeCategoryList');
+
+    if (txnCategoriesSharedMode) {
+        expenseList?.classList.remove('hidden');
+        incomeList?.classList.add('hidden');
+        populateCategoryMgmtList('expense');
+        return;
+    }
+
+    if (tabType === 'expense') {
+        expenseList?.classList.remove('hidden');
+        incomeList?.classList.add('hidden');
+    } else {
+        expenseList?.classList.add('hidden');
+        incomeList?.classList.remove('hidden');
+    }
+
+    populateCategoryMgmtList(tabType);
+}
+
+function populateCategoryMgmtList(type) {
+    const listContainer = type === 'expense'
+        ? document.getElementById('expenseCategoryList')
+        : document.getElementById('incomeCategoryList');
+    if (!listContainer) return;
+
+    const cats = getCategoriesForType(type);
+    listContainer.innerHTML = '';
+
+    if (cats.length === 0) {
+        listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No categories yet. Add one to get started!</p>';
+        return;
+    }
+
+    cats.forEach(cat => {
+        const icon = txnCategoryMap[cat.value]?.icon || (type === 'income' ? '⬆️' : '⬇️');
+        const item = document.createElement('div');
+        item.className = 'category-mgmt-item';
+        item.setAttribute('data-type', txnCategoriesSharedMode ? 'shared' : type);
+        item.innerHTML = `
+            <div class="category-mgmt-item-left">
+                <div class="category-mgmt-item-icon">${icon}</div>
+                <div class="category-mgmt-item-name">${cat.label}</div>
+                <div class="category-mgmt-item-type">${txnCategoriesSharedMode ? 'shared' : type}</div>
+            </div>
+            <button type="button" class="category-mgmt-item-delete" onclick="deleteCategoryFromManagement('${type}', '${cat.value}')" title="Delete category">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+        listContainer.appendChild(item);
+    });
+}
+
+function promptAddCategory() {
+    const activeTab = document.querySelector('.category-mgmt-tab.active');
+    const type = activeTab ? activeTab.getAttribute('data-tab') : 'expense';
+    const typeLabel = txnCategoriesSharedMode ? 'shared' : type;
+    const userInput = prompt(`Enter new ${typeLabel} category name:`);
+    if (!userInput) return;
+
+    const addedValue = addCustomTxnCategory(type, userInput);
+    if (!addedValue) return;
+
+    populateCategoryMgmtList(txnCategoriesSharedMode ? 'expense' : type);
+    const typeSelect = document.getElementById('type');
+    if (typeSelect) populateCategorySelect('txnCategory', typeSelect.value, addedValue);
+    const editTypeSelect = document.getElementById('editType');
+    if (editTypeSelect) populateCategorySelect('editTxnCategory', editTypeSelect.value, addedValue);
+    updateCategoryTypeLabel();
+
+    showToast('Category added', 'success');
+}
+
+function deleteCategoryFromManagement(type, value) {
+    const selectedLabel = getCategoryLabel(value);
+    const modeText = txnCategoriesSharedMode ? 'shared categories' : `${type} categories`;
+    if (!confirm(`Delete category "${selectedLabel}" from ${modeText}?`)) return;
+
+    const deleted = deleteCustomTxnCategory(type, value);
+    if (!deleted) return;
+
+    populateCategoryMgmtList(txnCategoriesSharedMode ? 'expense' : type);
+    const typeSelect = document.getElementById('type');
+    if (typeSelect) populateCategorySelect('txnCategory', typeSelect.value);
+    const editTypeSelect = document.getElementById('editType');
+    if (editTypeSelect) populateCategorySelect('editTxnCategory', editTypeSelect.value);
+    updateCategoryTypeLabel();
+
+    showToast('Category deleted', 'info');
+}
+
+function updateSharedCategoryModeUI() {
+    const toggle = document.getElementById('sharedTxnCategoriesToggle');
+    if (toggle) toggle.checked = txnCategoriesSharedMode;
+
+    const hint = document.getElementById('sharedTxnCategoriesHint');
+    if (hint) {
+        hint.textContent = txnCategoriesSharedMode
+            ? 'Shared mode is ON: same categories are used for both income and expense in this main category.'
+            : 'Shared mode is OFF: income and expense categories are separate in this main category.';
+    }
+
+    const incomeTab = document.querySelector('.category-mgmt-tab[data-tab="income"]');
+    if (incomeTab) {
+        incomeTab.style.opacity = txnCategoriesSharedMode ? '0.55' : '1';
+        incomeTab.style.pointerEvents = txnCategoriesSharedMode ? 'none' : 'auto';
+    }
 }

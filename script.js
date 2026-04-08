@@ -69,6 +69,7 @@ let currentBreakdownCategoryFilter = 'all'; // Filter by clicked breakdown categ
 let currentEditingId = null;
 let currentUserId = null; // Add user ID tracking
 let comparisonChart = null; // Chart instance
+let compositionChart = null; // Pie chart instance
 let customStartDate = null; // Custom range start
 let customEndDate = null; // Custom range end
 
@@ -5282,11 +5283,15 @@ function updateLegendStates() {
 // 3D Bar Chart for Income vs Expense Comparison with Smart Comparisons
 function updateComparisonChart() {
     const ctx = document.getElementById('comparisonChart');
+    const compositionCtx = document.getElementById('compositionChart');
     if (!ctx) return;
     
     // Destroy existing chart
     if (comparisonChart) {
         comparisonChart.destroy();
+    }
+    if (compositionChart) {
+        compositionChart.destroy();
     }
     
     const chartTitleElement = document.getElementById('chartTitle');
@@ -5347,17 +5352,17 @@ function updateComparisonChart() {
             if (daysToShow === 1) {
                 chartTitleElement.textContent = 'Today\'s Activity';
             } else if (daysToShow === 7) {
-                chartTitleElement.textContent = 'Last 7 Days Daily Breakdown';
+                chartTitleElement.textContent = 'Last 7 Days';
             } else if (daysToShow === 30) {
-                chartTitleElement.textContent = 'Last 30 Days Daily Analysis';
+                chartTitleElement.textContent = 'Last 30 Days';
             } else if (daysToShow === 90) {
-                chartTitleElement.textContent = 'Last 3 Months Overview';
+                chartTitleElement.textContent = 'Last 3 Months';
             } else if (daysToShow === 180) {
-                chartTitleElement.textContent = 'Last 6 Months Analysis';
+                chartTitleElement.textContent = 'Last 6 Months';
             } else if (daysToShow === 365) {
-                chartTitleElement.textContent = 'Last Year Overview';
+                chartTitleElement.textContent = 'Last Year';
             } else {
-                chartTitleElement.textContent = `Last ${daysToShow} Days Analysis`;
+                chartTitleElement.textContent = `Last ${daysToShow} Days`;
             }
         }
         
@@ -5484,7 +5489,7 @@ function updateComparisonChart() {
             });
         }
         
-        if (chartTitleElement) chartTitleElement.textContent = 'Last 6 Months Comparison';
+        if (chartTitleElement) chartTitleElement.textContent = '6-Month Comparison';
         
     } else if (currentView === 'yearly') {
         // Show last 5 years comparison
@@ -5519,7 +5524,7 @@ function updateComparisonChart() {
             });
         }
         
-        if (chartTitleElement) chartTitleElement.textContent = 'Last 5 Years Comparison';
+        if (chartTitleElement) chartTitleElement.textContent = '5-Year Comparison';
         
     } else if (currentView === 'all' || (currentView === 'custom' && !customStartDate && !customEndDate)) {
         // Show all-time monthly summary for 'all' view
@@ -5583,7 +5588,7 @@ function updateComparisonChart() {
             });
         }
         
-        if (chartTitleElement) chartTitleElement.textContent = 'All-Time Summary (Last 6 Months)';
+        if (chartTitleElement) chartTitleElement.textContent = 'All-Time (6M)';
         
     } else if (currentView === 'custom' && customStartDate && customEndDate) {
         // Handle custom date ranges
@@ -5604,7 +5609,7 @@ function updateComparisonChart() {
                 incomeData.push(dayTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0));
                 expenseData.push(dayTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0));
             }
-            if (chartTitleElement) chartTitleElement.textContent = 'Custom Range (Daily)';
+            if (chartTitleElement) chartTitleElement.textContent = 'Custom (Daily)';
         } else {
             // Group by month for longer ranges
             const monthlyData = {};
@@ -5625,7 +5630,7 @@ function updateComparisonChart() {
                 incomeData.push(monthlyData[monthKey].income);
                 expenseData.push(monthlyData[monthKey].expense);
             });
-            if (chartTitleElement) chartTitleElement.textContent = 'Custom Range (Monthly)';
+            if (chartTitleElement) chartTitleElement.textContent = 'Custom (Monthly)';
         }
         
         // Add custom range insights
@@ -5734,12 +5739,12 @@ function updateComparisonChart() {
             }
         }
         
-        if (chartTitleElement) chartTitleElement.textContent = 'Custom Range Analysis';
+        if (chartTitleElement) chartTitleElement.textContent = 'Custom Range';
     }
     
     // Render comparison badges
     if (comparisonSummary) {
-        comparisonSummary.innerHTML = comparisonBadges.slice(0, 3).map(badge => `
+        comparisonSummary.innerHTML = comparisonBadges.slice(0, 2).map(badge => `
             <span class="comparison-badge ${badge.type}">
                 <i class="fas ${badge.icon}"></i>
                 ${badge.text}
@@ -5747,17 +5752,132 @@ function updateComparisonChart() {
         `).join('');
     }
     
-    // Create 3D effect with enhanced gradients
+    // Create premium gradients sized to the current canvas.
     const context = ctx.getContext('2d');
-    const incomeGradient = context.createLinearGradient(0, 0, 0, 350);
-    incomeGradient.addColorStop(0, 'rgba(34, 197, 94, 1)');
-    incomeGradient.addColorStop(0.4, 'rgba(34, 197, 94, 0.85)');
-    incomeGradient.addColorStop(1, 'rgba(22, 163, 74, 0.5)');
-    
-    const expenseGradient = context.createLinearGradient(0, 0, 0, 350);
-    expenseGradient.addColorStop(0, 'rgba(129, 140, 248, 1)');
-    expenseGradient.addColorStop(0.4, 'rgba(99, 102, 241, 0.85)');
-    expenseGradient.addColorStop(1, 'rgba(79, 70, 229, 0.5)');
+    const gradientHeight = Math.max(220, ctx.clientHeight || 320);
+    const incomeGradient = context.createLinearGradient(0, 0, 0, gradientHeight);
+    incomeGradient.addColorStop(0, 'rgba(74, 222, 128, 0.98)');
+    incomeGradient.addColorStop(0.45, 'rgba(34, 197, 94, 0.88)');
+    incomeGradient.addColorStop(1, 'rgba(22, 163, 74, 0.40)');
+
+    const expenseGradient = context.createLinearGradient(0, 0, 0, gradientHeight);
+    expenseGradient.addColorStop(0, 'rgba(129, 140, 248, 0.98)');
+    expenseGradient.addColorStop(0.45, 'rgba(99, 102, 241, 0.9)');
+    expenseGradient.addColorStop(1, 'rgba(79, 70, 229, 0.42)');
+
+    const formatCompactCurrency = (value) => {
+        const num = Number(value) || 0;
+        if (num >= 10000000) return `₹${(num / 10000000).toFixed(num >= 100000000 ? 0 : 1)}Cr`;
+        if (num >= 100000) return `₹${(num / 100000).toFixed(num >= 1000000 ? 0 : 1)}L`;
+        if (num >= 1000) return `₹${Math.round(num / 1000)}K`;
+        return `₹${Math.round(num)}`;
+    };
+
+    const activeValues = [
+        ...(chartDataVisibility.income ? incomeData : []),
+        ...(chartDataVisibility.expense ? expenseData : [])
+    ].map(v => Number(v) || 0).filter(v => v > 0);
+    const maxVisibleValue = activeValues.length ? Math.max(...activeValues) : 0;
+    const suggestedMax = maxVisibleValue > 0 ? Math.ceil(maxVisibleValue * 1.18) : 1000;
+    const labelStride = labels.length > 10 ? 2 : 1;
+    const isMonthlyBudgetContext = currentView === 'monthly' || currentView === 'all' || (currentView === 'custom' && labels.length >= 2 && labels.length <= 12);
+    const monthsWithExpense = expenseData.filter(v => Number(v) > 0).length;
+    const budgetTarget = (isMonthlyBudgetContext && monthsWithExpense > 0)
+        ? Math.round(expenseData.reduce((sum, v) => sum + (Number(v) || 0), 0) / monthsWithExpense)
+        : 0;
+
+    const barValueLabelPlugin = {
+        id: 'barValueLabelPlugin',
+        afterDatasetsDraw(chart) {
+            if (chart.data.labels.length > 18) return;
+            const drawCtx = chart.ctx;
+
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                const meta = chart.getDatasetMeta(datasetIndex);
+                if (meta.hidden) return;
+                const numericValues = dataset.data.map(v => Number(v) || 0);
+                const peakValue = Math.max(...numericValues);
+
+                meta.data.forEach((barElement, index) => {
+                    const rawValue = numericValues[index];
+                    if (rawValue <= 0) return;
+                    const isPeak = rawValue === peakValue;
+                    if (!isPeak && index % labelStride !== 0) return;
+
+                    const point = barElement.tooltipPosition();
+                    drawCtx.save();
+                    drawCtx.textAlign = 'center';
+                    drawCtx.textBaseline = 'bottom';
+                    drawCtx.font = isPeak ? '700 10px Inter, sans-serif' : '600 9px Inter, sans-serif';
+                    drawCtx.fillStyle = isPeak ? String(dataset.borderColor) : 'rgba(148, 163, 184, 0.9)';
+                    drawCtx.fillText(formatCompactCurrency(rawValue), point.x, point.y - 8);
+                    drawCtx.restore();
+                });
+            });
+        }
+    };
+
+    const hoverGlowTrailPlugin = {
+        id: 'hoverGlowTrailPlugin',
+        afterDatasetsDraw(chart) {
+            const tooltip = chart.tooltip;
+            if (!tooltip || !tooltip._active || tooltip._active.length === 0) return;
+
+            const drawCtx = chart.ctx;
+            const chartArea = chart.chartArea;
+            tooltip._active.forEach(activePoint => {
+                const barElement = activePoint.element;
+                if (!barElement) return;
+
+                const point = barElement.tooltipPosition();
+                const glowGradient = drawCtx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                glowGradient.addColorStop(0, 'rgba(129, 140, 248, 0.22)');
+                glowGradient.addColorStop(1, 'rgba(129, 140, 248, 0.02)');
+
+                drawCtx.save();
+                drawCtx.beginPath();
+                drawCtx.moveTo(point.x, chartArea.top + 8);
+                drawCtx.lineTo(point.x, chartArea.bottom - 2);
+                drawCtx.lineWidth = 3;
+                drawCtx.strokeStyle = glowGradient;
+                drawCtx.shadowColor = 'rgba(129, 140, 248, 0.45)';
+                drawCtx.shadowBlur = 12;
+                drawCtx.stroke();
+                drawCtx.restore();
+            });
+        }
+    };
+
+    const monthlyBudgetLinePlugin = {
+        id: 'monthlyBudgetLinePlugin',
+        afterDatasetsDraw(chart) {
+            if (!budgetTarget || !chartDataVisibility.expense) return;
+            const yScale = chart.scales.y;
+            const chartArea = chart.chartArea;
+            if (!yScale || !chartArea) return;
+
+            const y = yScale.getPixelForValue(budgetTarget);
+            if (Number.isNaN(y) || y < chartArea.top || y > chartArea.bottom) return;
+
+            const drawCtx = chart.ctx;
+            drawCtx.save();
+            drawCtx.setLineDash([6, 6]);
+            drawCtx.strokeStyle = 'rgba(245, 158, 11, 0.68)';
+            drawCtx.lineWidth = 1.5;
+            drawCtx.beginPath();
+            drawCtx.moveTo(chartArea.left + 4, y);
+            drawCtx.lineTo(chartArea.right - 4, y);
+            drawCtx.stroke();
+
+            drawCtx.setLineDash([]);
+            drawCtx.fillStyle = 'rgba(245, 158, 11, 0.92)';
+            drawCtx.font = '600 10px Inter, sans-serif';
+            drawCtx.textAlign = 'right';
+            drawCtx.textBaseline = 'bottom';
+            drawCtx.fillText(`Budget target ${formatCompactCurrency(budgetTarget)}`, chartArea.right - 6, y - 4);
+            drawCtx.restore();
+        }
+    };
     
     // Create datasets based on visibility settings
     const datasets = [];
@@ -5771,8 +5891,11 @@ function updateComparisonChart() {
             borderWidth: 2,
             borderRadius: { topLeft: 8, topRight: 8 },
             borderSkipped: false,
-            hoverBackgroundColor: 'rgba(34, 197, 94, 0.95)',
-            hoverBorderWidth: 3
+            hoverBackgroundColor: 'rgba(74, 222, 128, 0.96)',
+            hoverBorderColor: 'rgba(34, 197, 94, 1)',
+            hoverBorderWidth: 3,
+            maxBarThickness: 44,
+            minBarLength: 2
         });
     }
     
@@ -5781,16 +5904,20 @@ function updateComparisonChart() {
             label: 'Expense',
             data: expenseData,
             backgroundColor: expenseGradient,
-            borderColor: 'rgba(239, 68, 68, 1)',
+            borderColor: 'rgba(99, 102, 241, 1)',
             borderWidth: 2,
             borderRadius: { topLeft: 8, topRight: 8 },
             borderSkipped: false,
-            hoverBackgroundColor: 'rgba(239, 68, 68, 0.95)',
-            hoverBorderWidth: 3
+            hoverBackgroundColor: 'rgba(129, 140, 248, 0.96)',
+            hoverBorderColor: 'rgba(99, 102, 241, 1)',
+            hoverBorderWidth: 3,
+            maxBarThickness: 44,
+            minBarLength: 2
         });
     }
 
     comparisonChart = new Chart(ctx, {
+        plugins: [barValueLabelPlugin, hoverGlowTrailPlugin, monthlyBudgetLinePlugin],
         type: 'bar',
         data: {
             labels: labels,
@@ -5799,6 +5926,14 @@ function updateComparisonChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 8,
+                    right: 10,
+                    bottom: 20,
+                    left: 8
+                }
+            },
             interaction: {
                 mode: 'index',
                 intersect: false
@@ -5809,12 +5944,15 @@ function updateComparisonChart() {
                 },
                 tooltip: {
                     backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                    borderColor: 'rgba(129, 140, 248, 0.36)',
+                    borderWidth: 1,
                     titleFont: { size: 14, weight: '600' },
                     bodyFont: { size: 13 },
                     padding: 14,
                     cornerRadius: 10,
                     displayColors: true,
                     boxPadding: 6,
+                    usePointStyle: true,
                     callbacks: {
                         title: function(context) {
                             return context[0].label;
@@ -5858,38 +5996,129 @@ function updateComparisonChart() {
                     },
                     ticks: {
                         font: { size: 12, weight: '600' },
-                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096'
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096',
+                        padding: 10,
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: labels.length > 10 ? 10 : labels.length
                     }
                 },
                 y: {
                     beginAtZero: true,
+                    suggestedMax: suggestedMax,
                     grid: {
-                        color: 'rgba(0, 0, 0, 0.06)',
-                        drawBorder: false
+                        color: 'rgba(148, 163, 184, 0.18)',
+                        drawBorder: false,
+                        borderDash: [5, 5]
                     },
                     ticks: {
                         font: { size: 11, weight: '500' },
                         color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096',
+                        padding: 8,
                         callback: function(value) {
-                            if (value >= 10000000) return '₹' + (value / 10000000).toFixed(1) + 'Cr';
-                            if (value >= 100000) return '₹' + (value / 100000).toFixed(1) + 'L';
-                            if (value >= 1000) return '₹' + (value / 1000).toFixed(0) + 'K';
-                            return '₹' + value;
+                            return formatCompactCurrency(value);
                         }
                     }
                 }
             },
             animation: {
-                duration: 1000,
+                duration: 1300,
                 easing: 'easeOutQuart',
                 delay: function(context) {
-                    return context.dataIndex * 100;
+                    return context.dataIndex * 80;
                 }
             },
             barPercentage: 0.75,
-            categoryPercentage: 0.85
+            categoryPercentage: 0.8
         }
     });
+
+    if (compositionCtx) {
+        const totalIncome = incomeData.reduce((sum, value) => sum + (Number(value) || 0), 0);
+        const totalExpense = expenseData.reduce((sum, value) => sum + (Number(value) || 0), 0);
+
+        const pieLabels = [];
+        const pieData = [];
+        const pieColors = [];
+        const pieBorders = [];
+
+        if (chartDataVisibility.income) {
+            pieLabels.push('Income');
+            pieData.push(totalIncome);
+            pieColors.push('rgba(34, 197, 94, 0.88)');
+            pieBorders.push('rgba(34, 197, 94, 1)');
+        }
+
+        if (chartDataVisibility.expense) {
+            pieLabels.push('Expense');
+            pieData.push(totalExpense);
+            pieColors.push('rgba(99, 102, 241, 0.88)');
+            pieBorders.push('rgba(99, 102, 241, 1)');
+        }
+
+        const pieTotal = pieData.reduce((sum, value) => sum + value, 0);
+
+        compositionChart = new Chart(compositionCtx, {
+            type: 'pie',
+            data: {
+                labels: pieLabels,
+                datasets: [{
+                    data: pieData,
+                    backgroundColor: pieColors,
+                    borderColor: pieBorders,
+                    borderWidth: 2,
+                    hoverOffset: 8,
+                    radius: '68%'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 10,
+                        bottom: 14,
+                        left: 10,
+                        right: 10
+                    }
+                },
+                animation: {
+                    duration: 900,
+                    easing: 'easeOutCubic'
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: {
+                            color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#718096',
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            padding: 10,
+                            font: {
+                                size: 10,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        borderColor: 'rgba(129, 140, 248, 0.32)',
+                        borderWidth: 1,
+                        cornerRadius: 10,
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const value = Number(context.raw) || 0;
+                                const percent = pieTotal > 0 ? ((value / pieTotal) * 100).toFixed(1) : '0.0';
+                                return `${context.label}: ₹${value.toLocaleString('en-IN')} (${percent}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
     
     // Update insights when chart updates
     updateInsights();

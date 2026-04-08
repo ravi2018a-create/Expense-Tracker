@@ -210,6 +210,18 @@ const DEFAULT_INCOME_CATEGORIES = [
 let expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
 let incomeCategories = [...DEFAULT_INCOME_CATEGORIES];
 let txnCategoriesSharedMode = false;
+let categoryCloudSyncTimer = null;
+
+function queueCategoryCloudSync() {
+    if (!(currentUser && supabaseClient)) return;
+    if (categoryCloudSyncTimer) clearTimeout(categoryCloudSyncTimer);
+
+    categoryCloudSyncTimer = setTimeout(() => {
+        saveCategories().catch(error => {
+            console.error('❌ Failed to sync category settings to cloud:', error);
+        });
+    }, 450);
+}
 
 function getTxnCategoryStorageKey() {
     const userKey = currentUserId || 'guest';
@@ -232,6 +244,59 @@ function saveTxnCategoriesToLocalStorage() {
         sharedMode: txnCategoriesSharedMode
     };
     localStorage.setItem(key, JSON.stringify(payload));
+
+    // Keep transaction category preferences available across devices.
+    queueCategoryCloudSync();
+}
+
+function getAllTxnCategorySnapshots() {
+    const userKey = currentUserId || 'guest';
+    const snapshots = {};
+
+    Object.keys(categories || {}).forEach((categoryKey) => {
+        const key = `txn_categories_${userKey}_${categoryKey}`;
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+
+        try {
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return;
+            snapshots[categoryKey] = {
+                expenseCategories: Array.isArray(parsed.expenseCategories) ? parsed.expenseCategories : [],
+                incomeCategories: Array.isArray(parsed.incomeCategories) ? parsed.incomeCategories : [],
+                sharedMode: !!parsed.sharedMode
+            };
+        } catch (error) {
+            console.warn(`⚠️ Skipping invalid txn category snapshot for ${categoryKey}:`, error);
+        }
+    });
+
+    return snapshots;
+}
+
+function applyTxnCategorySnapshotsFromCloud(snapshotMap) {
+    if (!snapshotMap || typeof snapshotMap !== 'object') return;
+
+    const userKey = currentUserId || 'guest';
+    Object.entries(snapshotMap).forEach(([categoryKey, snapshot]) => {
+        if (!snapshot || typeof snapshot !== 'object') return;
+
+        const normalized = {
+            expenseCategories: Array.isArray(snapshot.expenseCategories) ? snapshot.expenseCategories : [],
+            incomeCategories: Array.isArray(snapshot.incomeCategories) ? snapshot.incomeCategories : [],
+            sharedMode: !!snapshot.sharedMode
+        };
+
+        localStorage.setItem(`txn_categories_${userKey}_${categoryKey}`, JSON.stringify(normalized));
+    });
+}
+
+function buildCloudCategoryPayload() {
+    return {
+        version: 2,
+        categories,
+        txnCategorySnapshots: getAllTxnCategorySnapshots()
+    };
 }
 
 function getCategoriesForType(type) {
@@ -3251,7 +3316,7 @@ async function saveCategories() {
             // Prepare categories data for backend
             const categoriesData = {
                 user_id: currentUser.id,
-                categories_json: JSON.stringify(categories),
+                categories_json: JSON.stringify(buildCloudCategoryPayload()),
                 updated_at: new Date().toISOString()
             };
             
@@ -3458,11 +3523,23 @@ async function loadCategories() {
         
         if (data.length > 0) {
             const categoriesData = data[0];
-            categories = JSON.parse(categoriesData.categories_json);
+            const parsed = JSON.parse(categoriesData.categories_json);
+
+            if (parsed && typeof parsed === 'object' && parsed.categories && typeof parsed.categories === 'object') {
+                categories = parsed.categories;
+                applyTxnCategorySnapshotsFromCloud(parsed.txnCategorySnapshots);
+            } else {
+                // Backward compatibility for older payloads containing categories only.
+                categories = parsed;
+            }
+
             restoreActiveCategory();
             if (!categories[activeCategory]) {
                 activeCategory = 'daily';
             }
+
+            // Refresh in-memory transaction categories for whichever main category is active.
+            loadTxnCategoriesFromLocalStorage();
             console.log(`✅ Categories loaded from database: ${Object.keys(categories).length} categories`);
             
             // Save to localStorage as cache

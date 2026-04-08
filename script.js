@@ -272,6 +272,11 @@ function ensureTxnCategoryMapEntries() {
 }
 
 function loadTxnCategoriesFromLocalStorage() {
+    // Reset to defaults before loading category-scoped values to avoid cross-category leakage.
+    expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+    incomeCategories = [...DEFAULT_INCOME_CATEGORIES];
+    txnCategoriesSharedMode = false;
+
     const key = getTxnCategoryStorageKey();
     let raw = localStorage.getItem(key);
 
@@ -310,6 +315,16 @@ function loadTxnCategoriesFromLocalStorage() {
         txnCategoriesSharedMode = false;
         ensureTxnCategoryMapEntries();
     }
+}
+
+function getCommonTxnCategoryValues() {
+    if (txnCategoriesSharedMode) {
+        return new Set(expenseCategories.map(cat => cat.value));
+    }
+
+    const expenseSet = new Set(expenseCategories.map(cat => cat.value));
+    const incomeSet = new Set(incomeCategories.map(cat => cat.value));
+    return new Set([...expenseSet].filter(value => incomeSet.has(value)));
 }
 
 function normalizeTxnCategoryValue(name) {
@@ -3876,6 +3891,17 @@ function updateCategoryBreakdown() {
     const filtered = getFilteredTransactions();
 
     if (activeBreakdownTab === 'common') {
+        const allowedCommonCategories = getCommonTxnCategoryValues();
+
+        if (allowedCommonCategories.size === 0) {
+            container.innerHTML = `
+                <div class="breakdown-empty">
+                    <i class="fas fa-link"></i>
+                    <p>No common categories configured between income and expense</p>
+                </div>`;
+            return;
+        }
+
         if (filtered.length === 0) {
             container.innerHTML = `
                 <div class="breakdown-empty">
@@ -3888,6 +3914,8 @@ function updateCategoryBreakdown() {
         const catTotals = {};
         filtered.forEach(t => {
             const cat = detectTransactionCategory(t);
+            if (!allowedCommonCategories.has(cat)) return;
+
             if (!catTotals[cat]) {
                 catTotals[cat] = {
                     expenseTotal: 0,
@@ -3908,7 +3936,17 @@ function updateCategoryBreakdown() {
             catTotals[cat].transactions.push(t);
         });
 
-        const sorted = Object.entries(catTotals).sort((a, b) => {
+        const commonEntries = Object.entries(catTotals);
+        if (commonEntries.length === 0) {
+            container.innerHTML = `
+                <div class="breakdown-empty">
+                    <i class="fas fa-link"></i>
+                    <p>No transactions found for common categories in this period</p>
+                </div>`;
+            return;
+        }
+
+        const sorted = commonEntries.sort((a, b) => {
             const netA = a[1].expenseTotal - a[1].incomeTotal;
             const netB = b[1].expenseTotal - b[1].incomeTotal;
             return Math.abs(netB) - Math.abs(netA);

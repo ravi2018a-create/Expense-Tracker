@@ -8653,6 +8653,409 @@ body.theme-switching * {
     }
 }
 
+/* Final mobile normalization for recent compact + category-management updates */
+@media (max-width: 768px) {
+    .summary-section.summary-section-top {
+        width: calc(100% - 0.5rem);
+        margin: 0.2rem auto 0.2rem;
+        padding: 0;
+    }
+
+    .summary-section.summary-section-top .summary-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem;
+    }
+
+    .summary-section.summary-section-top .summary-card {
+        padding: 0.68rem 0.74rem;
+        border-radius: 12px;
+        gap: 0.55rem;
+    }
+
+    .summary-section.summary-section-top .summary-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        font-size: 1rem;
+    }
+
+    .summary-section.summary-section-top .summary-content h3 {
+        font-size: 0.68rem;
+        margin-bottom: 0.16rem;
+    }
+
+    .summary-section.summary-section-top .summary-content span {
+        font-size: 1.02rem;
+    }
+
+    .summary-section.summary-section-top .summary-subtitle {
+        font-size: 0.62rem !important;
+    }
+
+    .category-section {
+        padding: 0.38rem 0.5rem;
+    }
+
+    .category-container {
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+
+    .category-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem;
+        flex: 1;
+    }
+
+    .category-tab {
+        padding: 0.42rem 0.56rem;
+        font-size: 0.72rem;
+        min-height: 38px;
+        justify-content: center;
+    }
+
+    .category-manage-btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 9px;
+    }
+
+    .timeline-control-hub {
+        width: calc(100% - 0.4rem);
+        margin: 0.08rem auto 0.24rem;
+        padding: 0.24rem;
+        border-radius: 12px;
+    }
+
+    .timeline-control-hub .view-nav {
+        padding: 0.2rem;
+        gap: 0.24rem;
+    }
+
+    .timeline-control-hub .nav-btn {
+        padding: 0.42rem 0.56rem;
+        font-size: 0.66rem;
+        min-width: 0;
+    }
+
+    .timeline-control-hub .current-period-header.relocated-period-toolbar {
+        padding: 0.3rem 0.36rem;
+        margin-top: 0.2rem;
+    }
+
+    .timeline-control-hub .period-center {
+        min-width: 0;
+    }
+
+    .timeline-control-hub #currentPeriodDisplay {
+        font-size: 0.82rem;
+    }
+
+    .timeline-control-hub .date-details {
+        font-size: 0.66rem;
+    }
+
+    .timeline-control-hub .transaction-count-badge {
+        font-size: 0.62rem;
+        padding: 0.16rem 0.42rem;
+    }
+
+    .timeline-control-hub .period-footer-left,
+    .timeline-control-hub .quick-period-buttons {
+        gap: 0.22rem;
+    }
+
+    .timeline-control-hub .quick-period-buttons {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .timeline-control-hub .all-transactions-btn,
+    .timeline-control-hub .quick-period-btn {
+        min-height: 26px;
+        font-size: 0.62rem;
+        padding: 0.14rem 0.28rem;
+    }
+
+    .add-transaction-collapsible.add-transaction-fullwidth .add-transaction-toggle {
+        padding: 0.42rem 0.58rem;
+        font-size: 0.76rem;
+    }
+
+    .expense-workbench {
+        --panel-height: auto;
+        margin-bottom: 0.35rem;
+    }
+
+    .expense-workbench-shell {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        padding: 0.4rem;
+        border-radius: 12px;
+    }
+
+    .expense-workbench .transactions-section,
+    .expense-workbench .category-breakdown-section {
+        height: auto;
+        padding: 0.6rem;
+        border-radius: 10px;
+    }
+
+    .expense-workbench .transactions-scroll-container {
+        height: auto;
+        max-height: 44vh;
+    }
+
+    .expense-workbench-shell #downloadButton {
+        width: 100%;
+        min-width: 0;
+        padding: 0.5rem 0.65rem;
+        font-size: 0.78rem;
+    }
+
+    .expense-workbench-shell .breakdown-toggle-tabs {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.2rem;
+        padding: 0.2rem;
+    }
+
+    .expense-workbench-shell .breakdown-tab {
+        justify-content: center;
+        padding: 0.28rem 0.32rem;
+        font-size: 0.66rem;
+    }
+
+    .expense-workbench-shell .transaction-item {
+        padding: 0.56rem 0.62rem;
+        margin-bottom: 0.34rem;
+    }
+
+    .expense-workbench-shell .category-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 0.8rem;
+        border-radius: 10px;
+    }
+
+    .expense-workbench-shell .transaction-info h4 {
+        font-size: 0.78rem;
+    }
+
+    .expense-workbench-shell .transaction-info p {
+        font-size: 0.66rem;
+    }
+
+    .expense-workbench-shell .transaction-amount {
+        font-size: 0.76rem;
+        padding: 0.2rem 0.36rem;
+    }
+
+    .expense-workbench-shell .breakdown-item .transaction-info h4 {
+        font-size: 0.74rem;
+    }
+
+    .expense-workbench-shell .breakdown-item .transaction-info p {
+        font-size: 0.62rem;
+    }
+
+    .expense-workbench-shell .breakdown-item .transaction-amount {
+        font-size: 0.72rem;
+        padding: 0.16rem 0.32rem;
+    }
+
+    .chart-section {
+        height: auto;
+        padding: 0.72rem;
+        margin-bottom: 0.45rem;
+    }
+
+    .chart-header {
+        gap: 0.5rem;
+        margin-bottom: 0.55rem;
+    }
+
+    .chart-legend {
+        width: 100%;
+        justify-content: space-between;
+        padding: 0.4rem 0.5rem;
+        gap: 0.35rem;
+    }
+
+    .chart-content-layout {
+        gap: 0.55rem;
+    }
+
+    .chart-area,
+    .chart-container-3d {
+        min-height: 210px;
+        height: 210px;
+    }
+
+    .chart-comparison-summary {
+        max-height: 110px;
+    }
+
+    .modal-content {
+        width: calc(100% - 0.75rem);
+        max-width: 680px;
+        padding: 1rem;
+        border-radius: 14px;
+        max-height: 92vh;
+    }
+
+    .category-manage-mode-tabs {
+        gap: 0.4rem;
+        padding: 0.3rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .category-manage-mode-tab {
+        padding: 0.5rem 0.55rem;
+        font-size: 0.76rem;
+        border-radius: 10px;
+    }
+
+    .category-management-tabs {
+        gap: 0.45rem;
+        padding: 0.32rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .category-mgmt-tab {
+        padding: 0.48rem 0.55rem;
+        font-size: 0.72rem;
+        letter-spacing: 0;
+    }
+
+    .category-mgmt-content {
+        padding: 0.6rem;
+        max-height: 36vh;
+        margin-bottom: 0.75rem;
+    }
+
+    .category-mgmt-item {
+        padding: 0.62rem;
+        border-radius: 10px;
+    }
+
+    .category-mgmt-item-name {
+        font-size: 0.82rem;
+    }
+
+    .category-mgmt-item-type {
+        font-size: 0.62rem;
+        padding: 0.12rem 0.4rem;
+    }
+
+    .category-list {
+        max-height: 38vh;
+        overflow-y: auto;
+    }
+
+    .category-item {
+        padding: 0.62rem;
+        margin-bottom: 0.5rem;
+        border-radius: 10px;
+    }
+
+    .category-mgmt-actions {
+        padding-top: 0.7rem;
+        gap: 0.55rem;
+    }
+
+    .btn-secondary {
+        padding: 0.58rem 0.72rem;
+        font-size: 0.8rem;
+        border-radius: 10px;
+    }
+}
+
+@media (min-width: 601px) and (max-width: 768px) {
+    .timeline-control-hub .quick-period-buttons {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .expense-workbench {
+        --left-panel-width: 52%;
+        --panel-height: 36vh;
+    }
+
+    .expense-workbench-shell {
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+        align-items: stretch;
+    }
+
+    .expense-workbench .transactions-section,
+    .expense-workbench .category-breakdown-section {
+        height: var(--panel-height);
+    }
+
+    .expense-workbench .transactions-scroll-container {
+        height: calc(var(--panel-height) - 54px);
+        max-height: none;
+    }
+
+    .expense-workbench-shell .breakdown-toggle-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .summary-section.summary-section-top .summary-row {
+        grid-template-columns: 1fr;
+    }
+
+    .category-tabs {
+        grid-template-columns: 1fr;
+    }
+
+    .timeline-control-hub {
+        width: calc(100% - 0.25rem);
+        padding: 0.18rem;
+        border-radius: 10px;
+    }
+
+    .timeline-control-hub .quick-period-buttons {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .expense-workbench-shell {
+        padding: 0.3rem;
+        border-radius: 10px;
+    }
+
+    .expense-workbench-shell .breakdown-tab {
+        font-size: 0.6rem;
+        padding: 0.24rem 0.2rem;
+    }
+
+    .chart-area,
+    .chart-container-3d {
+        min-height: 190px;
+        height: 190px;
+    }
+
+    .modal-content {
+        width: calc(100% - 0.45rem);
+        padding: 0.8rem;
+        border-radius: 12px;
+    }
+
+    .category-manage-mode-tab {
+        font-size: 0.7rem;
+        padding: 0.45rem 0.4rem;
+    }
+
+    .category-mgmt-tab {
+        font-size: 0.66rem;
+        padding: 0.4rem 0.35rem;
+    }
+}
+
 .breakdown-item .breakdown-main-row {
     display: flex;
     align-items: center;

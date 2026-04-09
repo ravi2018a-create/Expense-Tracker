@@ -3469,6 +3469,20 @@ async function loadTransactions() {
         categoriesLoaded = await loadCategories();
         if (!categoriesLoaded) {
             console.log('📂 Loading categories from localStorage as fallback...');
+            const catKey = `categories_${currentUserId}`;
+            const savedCats = localStorage.getItem(catKey);
+            if (savedCats) {
+                try {
+                    categories = JSON.parse(savedCats);
+                    restoreActiveCategory();
+                    if (!categories[activeCategory]) activeCategory = 'daily';
+                    loadTxnCategoriesFromLocalStorage();
+                    categoriesLoaded = true;
+                    console.log('✅ Categories loaded from localStorage fallback');
+                } catch (e) {
+                    console.error('❌ Error loading categories from localStorage:', e);
+                }
+            }
         }
     }
     
@@ -3624,6 +3638,28 @@ async function loadCategories() {
             } else {
                 // Backward compatibility for older payloads containing categories only.
                 categories = parsed;
+            }
+
+            // Merge with localStorage to recover any categories that weren't synced to cloud
+            const localKey = `categories_${currentUserId}`;
+            const localRaw = localStorage.getItem(localKey);
+            if (localRaw) {
+                try {
+                    const localCats = JSON.parse(localRaw);
+                    let mergeNeeded = false;
+                    Object.keys(localCats).forEach(id => {
+                        if (!categories[id]) {
+                            categories[id] = localCats[id];
+                            mergeNeeded = true;
+                            console.log(`🔀 Recovered locally-created category: ${id}`);
+                        }
+                    });
+                    if (mergeNeeded) {
+                        saveCategories().catch(e => console.warn('⚠️ Failed to re-sync merged categories:', e));
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Could not merge localStorage categories:', e);
+                }
             }
 
             restoreActiveCategory();

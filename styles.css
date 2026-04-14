@@ -5679,6 +5679,82 @@ body.theme-switching * {
     font-size: 0.82rem;
 }
 
+.transactions-header-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.export-menu {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    z-index: 30;
+    min-width: 190px;
+    padding: 0.35rem;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(15, 23, 42, 0.96);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.24);
+    backdrop-filter: blur(14px);
+}
+
+.export-menu.hidden {
+    display: none;
+}
+
+.export-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 0;
+    background: transparent;
+    color: #f8fafc;
+    padding: 0.72rem 0.8rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.86rem;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.export-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+}
+
+.export-menu-item span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.export-menu-item small {
+    color: rgba(226, 232, 240, 0.72);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+[data-theme="light"] .export-menu {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+}
+
+[data-theme="light"] .export-menu-item {
+    color: #0f172a;
+}
+
+[data-theme="light"] .export-menu-item:hover {
+    background: rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .export-menu-item small {
+    color: rgba(71, 85, 105, 0.82);
+}
+
 .expense-workbench-shell .category-breakdown-header {
     margin-bottom: 0.65rem;
 }
@@ -8743,6 +8819,16 @@ body.theme-switching * {
         border-radius: 10px;
         box-sizing: border-box;
         touch-action: manipulation;
+    }
+
+    .transactions-header-actions {
+        width: 100%;
+    }
+
+    .export-menu {
+        left: 0;
+        right: 0;
+        min-width: 0;
     }
 }
 

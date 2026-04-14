@@ -20,7 +20,7 @@ A beautiful, modern expense tracking application with premium UI/UX design, buil
 ### 💾 **Data Management**
 - Local storage for offline usage
 - Supabase integration for cloud sync
-- Export/import functionality
+- Export/import functionality with Excel and PDF download support
 - Real-time data synchronization
 
 ### 🔒 **Authentication**

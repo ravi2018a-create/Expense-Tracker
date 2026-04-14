@@ -1540,10 +1540,16 @@ function addDownloadButton() {
             return; // Don't add duplicate
         }
         
+        const actionWrapper = document.createElement('div');
+        actionWrapper.className = 'transactions-header-actions';
+
         const downloadButton = document.createElement('button');
         downloadButton.id = 'downloadButton';
         downloadButton.innerHTML = '<i class="fas fa-download"></i> Export';
         downloadButton.className = 'action-button export-btn';
+        downloadButton.type = 'button';
+        downloadButton.setAttribute('aria-haspopup', 'true');
+        downloadButton.setAttribute('aria-expanded', 'false');
         downloadButton.style.cssText = `
             background: var(--success-color);
             color: white;
@@ -1557,7 +1563,57 @@ function addDownloadButton() {
             gap: 0.5rem;
             transition: all 0.3s ease;
         `;
-        downloadButton.addEventListener('click', exportToJSON);
+
+        const exportMenu = document.createElement('div');
+        exportMenu.id = 'exportMenu';
+        exportMenu.className = 'export-menu hidden';
+        exportMenu.innerHTML = `
+            <button type="button" class="export-menu-item" data-export-format="excel">
+                <span><i class="fas fa-file-excel"></i> Excel Export</span>
+                <small>.xlsx</small>
+            </button>
+            <button type="button" class="export-menu-item" data-export-format="pdf">
+                <span><i class="fas fa-file-pdf"></i> PDF Export</span>
+                <small>.pdf</small>
+            </button>
+        `;
+
+        downloadButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const isOpen = !exportMenu.classList.contains('hidden');
+            exportMenu.classList.toggle('hidden', isOpen);
+            downloadButton.setAttribute('aria-expanded', String(!isOpen));
+        });
+
+        exportMenu.addEventListener('click', (event) => {
+            const menuItem = event.target.closest('[data-export-format]');
+            if (!menuItem) return;
+
+            const format = menuItem.getAttribute('data-export-format');
+            exportMenu.classList.add('hidden');
+            downloadButton.setAttribute('aria-expanded', 'false');
+
+            if (format === 'excel') {
+                exportTransactionsToExcel();
+            } else if (format === 'pdf') {
+                exportTransactionsToPDF();
+            }
+        });
+
+        if (!document.body.dataset.exportMenuBound) {
+            document.addEventListener('click', (event) => {
+                const exportMenuEl = document.getElementById('exportMenu');
+                const downloadButtonEl = document.getElementById('downloadButton');
+
+                if (!exportMenuEl || !downloadButtonEl) return;
+
+                if (!exportMenuEl.contains(event.target) && !downloadButtonEl.contains(event.target)) {
+                    exportMenuEl.classList.add('hidden');
+                    downloadButtonEl.setAttribute('aria-expanded', 'false');
+                }
+            });
+            document.body.dataset.exportMenuBound = 'true';
+        }
         
         // Add hover effect
         downloadButton.addEventListener('mouseenter', () => {
@@ -1569,7 +1625,9 @@ function addDownloadButton() {
             downloadButton.style.boxShadow = 'none';
         });
         
-        transactionsHeader.appendChild(downloadButton);
+        actionWrapper.appendChild(downloadButton);
+        actionWrapper.appendChild(exportMenu);
+        transactionsHeader.appendChild(actionWrapper);
     }
 }
 
@@ -4859,25 +4917,1058 @@ function formatDate(dateString) {
 }
 
 // Export/Import functionality for everyone
-function exportToJSON() {
-    const userName = localStorage.getItem('userName') || 'User';
-    const data = {
-        userName: userName,
-        userId: currentUserId,
-        transactions: transactions,
-        exportDate: new Date().toISOString(),
-        version: '1.0.0'
+function getExportScopeLabel() {
+    const currentPeriodDisplay = document.getElementById('currentPeriodDisplay');
+    const label = currentPeriodDisplay?.textContent?.trim();
+    return label || 'Recent Transactions';
+}
+
+function getExportUserName() {
+    return currentUser?.user_metadata?.full_name
+        || currentUser?.user_metadata?.name
+        || currentUser?.email?.split('@')[0]
+        || localStorage.getItem('userName')
+        || 'User';
+}
+
+function sanitizeFileNamePart(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+}
+
+function buildExportFileName(extension) {
+    const userName = sanitizeFileNamePart(getExportUserName()) || 'user';
+    const scope = sanitizeFileNamePart(getExportScopeLabel()) || 'recent-transactions';
+    const exportDate = new Date().toISOString().split('T')[0];
+    return `${userName}-${scope}-${exportDate}.${extension}`;
+}
+
+function formatCurrencyForPdf(amount, options = {}) {
+    const { compact = false, decimals = 0 } = options;
+    const numericAmount = Number(amount) || 0;
+
+    if (compact) {
+        if (Math.abs(numericAmount) >= 10000000) return `INR ${(numericAmount / 10000000).toFixed(1)}Cr`;
+        if (Math.abs(numericAmount) >= 100000) return `INR ${(numericAmount / 100000).toFixed(1)}L`;
+        if (Math.abs(numericAmount) >= 1000) return `INR ${Math.round(numericAmount / 1000)}K`;
+    }
+
+    return `INR ${new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    }).format(numericAmount)}`;
+}
+
+function drawPdfFittedText(pdf, text, x, y, maxWidth, options = {}) {
+    const {
+        fontSize = 12,
+        minFontSize = 8,
+        align = 'left'
+    } = options;
+
+    let currentSize = fontSize;
+    pdf.setFontSize(currentSize);
+
+    while (currentSize > minFontSize && pdf.getTextWidth(text) > maxWidth) {
+        currentSize -= 0.5;
+        pdf.setFontSize(currentSize);
+    }
+
+    pdf.text(text, x, y, { align, maxWidth });
+}
+
+function formatCurrencyForExcel(amount) {
+    const numericAmount = Number(amount) || 0;
+    return `INR ${new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(numericAmount)}`;
+}
+
+function makeSignedCurrencyDisplay(amount, formatter) {
+    const numericAmount = Number(amount) || 0;
+    return `${numericAmount >= 0 ? '+' : '-'}${formatter(Math.abs(numericAmount))}`;
+}
+
+function getExportOverview(rows) {
+    const totalIncome = rows.filter((row) => row.type === 'Income').reduce((sum, row) => sum + row.amount, 0);
+    const totalExpense = rows.filter((row) => row.type === 'Expense').reduce((sum, row) => sum + row.amount, 0);
+    const netAmount = totalIncome - totalExpense;
+
+    return {
+        totalIncome,
+        totalExpense,
+        netAmount,
+        transactionCount: rows.length
     };
-    
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-    
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(dataBlob);
-    link.download = `${userName}-expenses-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    
-    showToast(`${userName}'s expenses downloaded successfully!`, 'success');
+}
+
+function styleExcelCell(cell, config = {}) {
+    if (config.font) cell.font = config.font;
+    if (config.fill) cell.fill = config.fill;
+    if (config.alignment) cell.alignment = config.alignment;
+    if (config.border) cell.border = config.border;
+    if (config.numFmt) cell.numFmt = config.numFmt;
+}
+
+function addExcelBorder(cell, color = 'D5DBE7') {
+    cell.border = {
+        top: { style: 'thin', color: { argb: color } },
+        left: { style: 'thin', color: { argb: color } },
+        bottom: { style: 'thin', color: { argb: color } },
+        right: { style: 'thin', color: { argb: color } }
+    };
+}
+
+function fillExcelRange(worksheet, startRow, endRow, startCol, endCol, fill) {
+    for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+        for (let colIndex = startCol; colIndex <= endCol; colIndex += 1) {
+            worksheet.getRow(rowIndex).getCell(colIndex).fill = fill;
+        }
+    }
+}
+
+function createChartAreaBackgroundPlugin(color = '#F8FAFC') {
+    return {
+        id: 'chartAreaBackgroundPlugin',
+        beforeDraw(chart) {
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return;
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.fillRect(chartArea.left, chartArea.top, chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+            ctx.restore();
+        }
+    };
+}
+
+function getTransactionsForExport() {
+    const filteredTransactions = getFilteredTransactions()
+        .slice()
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+    if (!filteredTransactions.length) {
+        showToast('No transactions available for export in the current view', 'warning');
+        return null;
+    }
+
+    return filteredTransactions;
+}
+
+function buildExportRows(transactionsToExport) {
+    const rows = transactionsToExport.map((transaction, index) => {
+        const resolvedCategory = detectTransactionCategory(transaction);
+        const numericAmount = Number(transaction.amount) || 0;
+        const signedAmount = transaction.type === 'income' ? numericAmount : -numericAmount;
+
+        return {
+            originalIndex: index,
+            serial: index + 1,
+            date: transaction.date || '',
+            type: transaction.type === 'income' ? 'Income' : 'Expense',
+            category: getCategoryLabel(resolvedCategory),
+            description: transaction.description || '',
+            amount: numericAmount,
+            signedAmount,
+            amountDisplay: makeSignedCurrencyDisplay(signedAmount, formatCurrencyForPdf),
+            netAmountDisplay: makeSignedCurrencyDisplay(signedAmount, formatCurrencyForPdf),
+            excelAmountDisplay: makeSignedCurrencyDisplay(signedAmount, formatCurrencyForExcel),
+            excelNetAmountDisplay: makeSignedCurrencyDisplay(signedAmount, formatCurrencyForExcel)
+        };
+    });
+
+    return rows;
+}
+
+function applyRunningNetByChronologicalOrder(rows) {
+    const chronologicalRows = rows.slice().sort((a, b) => {
+        const dateCompare = String(a.date || '').localeCompare(String(b.date || ''));
+        if (dateCompare !== 0) return dateCompare;
+
+        // For same date, process older visible entries first (bottom to top in current export view).
+        return (b.originalIndex || 0) - (a.originalIndex || 0);
+    });
+
+    let runningNet = 0;
+    chronologicalRows.forEach((row) => {
+        runningNet += Number(row.signedAmount) || 0;
+        row.runningNet = runningNet;
+        row.runningNetDisplay = makeSignedCurrencyDisplay(runningNet, formatCurrencyForPdf);
+        row.excelRunningNetDisplay = makeSignedCurrencyDisplay(runningNet, formatCurrencyForExcel);
+    });
+
+    return rows;
+}
+
+function buildExportCategoryTotals(transactionsToExport) {
+    const totals = new Map();
+
+    transactionsToExport.forEach((transaction) => {
+        const resolvedCategory = detectTransactionCategory(transaction);
+        const label = getCategoryLabel(resolvedCategory);
+        const amount = Number(transaction.amount) || 0;
+        const current = totals.get(label) || { income: 0, expense: 0, total: 0 };
+
+        if (transaction.type === 'income') {
+            current.income += amount;
+        } else {
+            current.expense += amount;
+        }
+
+        current.total += amount;
+        totals.set(label, current);
+    });
+
+    return Array.from(totals.entries())
+        .map(([label, values]) => ({ label, ...values }))
+        .sort((a, b) => b.total - a.total);
+}
+
+function buildExportTrendBuckets(transactionsToExport) {
+    const uniqueDates = [...new Set(transactionsToExport.map((transaction) => transaction.date).filter(Boolean))].sort();
+    const useDailyBuckets = uniqueDates.length <= 14;
+    const buckets = new Map();
+
+    transactionsToExport.forEach((transaction) => {
+        if (!transaction.date) return;
+
+        const bucketKey = useDailyBuckets ? transaction.date : transaction.date.slice(0, 7);
+        const bucket = buckets.get(bucketKey) || { income: 0, expense: 0 };
+        const amount = Number(transaction.amount) || 0;
+
+        if (transaction.type === 'income') {
+            bucket.income += amount;
+        } else {
+            bucket.expense += amount;
+        }
+
+        buckets.set(bucketKey, bucket);
+    });
+
+    return Array.from(buckets.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, values]) => ({
+            key,
+            label: useDailyBuckets
+                ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                : new Date(`${key}-01T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+            ...values
+        }));
+}
+
+function buildPdfInsights(transactionsToExport, summary, categoryTotals) {
+    const insights = [];
+
+    if (categoryTotals.length) {
+        const topExpenseCategory = categoryTotals
+            .filter((category) => category.expense > 0)
+            .sort((a, b) => b.expense - a.expense)[0];
+
+        if (topExpenseCategory) {
+            insights.push(`Top expense category: ${topExpenseCategory.label} at ${formatCurrencyForPdf(topExpenseCategory.expense)}`);
+        }
+    }
+
+    const largestExpense = transactionsToExport
+        .filter((transaction) => transaction.type === 'expense')
+        .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+    if (largestExpense) {
+        insights.push(`Largest expense: ${largestExpense.description || getCategoryLabel(detectTransactionCategory(largestExpense))} on ${formatDate(largestExpense.date)} for ${formatCurrencyForPdf(largestExpense.amount)}`);
+    }
+
+    const largestIncome = transactionsToExport
+        .filter((transaction) => transaction.type === 'income')
+        .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))[0];
+    if (largestIncome) {
+        insights.push(`Largest income: ${largestIncome.description || getCategoryLabel(detectTransactionCategory(largestIncome))} on ${formatDate(largestIncome.date)} for ${formatCurrencyForPdf(largestIncome.amount)}`);
+    }
+
+    if (summary.totalExpense > 0) {
+        const savingsRate = ((summary.net / summary.totalExpense) * 100);
+        insights.push(`${summary.net >= 0 ? 'Net positive' : 'Net negative'} period with ${Math.abs(savingsRate).toFixed(1)}% ${summary.net >= 0 ? 'surplus' : 'overspend'} against expenses`);
+    }
+
+    return insights.slice(0, 4);
+}
+
+function buildPdfSummary(transactionsToExport, rows) {
+    const datedTransactions = transactionsToExport.filter((transaction) => transaction.date).slice().sort((a, b) => a.date.localeCompare(b.date));
+    const totalIncome = rows.filter((row) => row.signedAmount > 0).reduce((sum, row) => sum + row.signedAmount, 0);
+    const totalExpense = rows.filter((row) => row.signedAmount < 0).reduce((sum, row) => sum + Math.abs(row.signedAmount), 0);
+    const net = totalIncome - totalExpense;
+    const firstDate = datedTransactions[0]?.date || '';
+    const lastDate = datedTransactions[datedTransactions.length - 1]?.date || '';
+    const daysCovered = firstDate && lastDate
+        ? Math.max(1, Math.round((new Date(`${lastDate}T00:00:00`) - new Date(`${firstDate}T00:00:00`)) / 86400000) + 1)
+        : 1;
+
+    return {
+        totalIncome,
+        totalExpense,
+        net,
+        count: rows.length,
+        daysCovered,
+        averagePerDay: rows.length ? (totalExpense / daysCovered) : 0,
+        firstDate,
+        lastDate
+    };
+}
+
+function addPdfFooter(pdf) {
+    const pageCount = pdf.getNumberOfPages();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        pdf.setDrawColor(226, 232, 240);
+        pdf.line(40, pageHeight - 28, pageWidth - 40, pageHeight - 28);
+        pdf.setFontSize(9);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text('Expense Tracker Analytics Report', 40, pageHeight - 14);
+        pdf.text(`Page ${page} of ${pageCount}`, pageWidth - 40, pageHeight - 14, { align: 'right' });
+    }
+}
+
+async function renderPdfChart(config, width = 520, height = 240, background = '#ffffff') {
+    const canvas = document.createElement('canvas');
+    const ratio = window.devicePixelRatio || 1;
+
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const context = canvas.getContext('2d');
+    context.scale(ratio, ratio);
+
+    const canvasBackgroundPlugin = {
+        id: 'canvasBackgroundFillPlugin',
+        beforeDraw(chart) {
+            const { ctx, width: chartWidth, height: chartHeight } = chart;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = background;
+            ctx.fillRect(0, 0, chartWidth, chartHeight);
+            ctx.restore();
+        }
+    };
+
+    const configPlugins = Array.isArray(config.plugins) ? config.plugins : [];
+
+    const chart = new Chart(context, {
+        ...config,
+        plugins: [canvasBackgroundPlugin, ...configPlugins],
+        options: {
+            animation: false,
+            responsive: false,
+            maintainAspectRatio: false,
+            ...config.options
+        }
+    });
+
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const flattenedCanvas = document.createElement('canvas');
+    flattenedCanvas.width = canvas.width;
+    flattenedCanvas.height = canvas.height;
+    const flattenedCtx = flattenedCanvas.getContext('2d');
+    flattenedCtx.fillStyle = background;
+    flattenedCtx.fillRect(0, 0, flattenedCanvas.width, flattenedCanvas.height);
+    flattenedCtx.drawImage(canvas, 0, 0);
+
+    const image = flattenedCanvas.toDataURL('image/png', 1);
+    chart.destroy();
+    return image;
+}
+
+async function buildPdfChartImages(summary, categoryTotals, trendBuckets) {
+    const categorySlice = categoryTotals
+        .filter((category) => category.total > 0)
+        .slice(0, 5);
+    const safeCategorySlice = categorySlice.length
+        ? categorySlice
+        : [{ label: 'No data', total: 0 }];
+    const safeTrendBuckets = trendBuckets.length
+        ? trendBuckets
+        : [{ label: 'No data', income: 0, expense: 0 }];
+
+    const donutImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#FFFFFF')],
+        type: 'doughnut',
+        data: {
+            labels: ['Income', 'Expenses'],
+            datasets: [{
+                data: [summary.totalIncome, summary.totalExpense],
+                backgroundColor: ['#10B981', '#F97316'],
+                borderColor: ['#059669', '#EA580C'],
+                borderWidth: 3,
+                hoverOffset: 0
+            }]
+        },
+        options: {
+            cutout: '68%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#334155', font: { size: 11, weight: '600' }, padding: 14 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            return `${context.label}: ${formatCurrency(context.raw || 0)}`;
+                        }
+                    }
+                }
+            }
+        }
+    }, 320, 220, '#ffffff');
+
+    const categoryImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#FFFFFF')],
+        type: 'bar',
+        data: {
+            labels: safeCategorySlice.map((category) => category.label),
+            datasets: [{
+                label: 'Category Total',
+                data: safeCategorySlice.map((category) => category.total),
+                backgroundColor: ['#0F766E', '#0EA5E9', '#8B5CF6', '#F59E0B', '#EF4444'],
+                borderRadius: 8,
+                maxBarThickness: 38
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            return formatCurrency(context.raw || 0);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#475569', font: { size: 10, weight: '600' } },
+                    grid: { display: false }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#64748b',
+                        callback(value) {
+                            const numeric = Number(value) || 0;
+                            if (numeric >= 100000) return `${Math.round(numeric / 1000)}k`;
+                            return `${Math.round(numeric)}`;
+                        }
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.18)' }
+                }
+            }
+        }
+    }, 420, 220, '#ffffff');
+
+    const trendImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#F8FAFC')],
+        type: 'line',
+        data: {
+            labels: safeTrendBuckets.map((bucket) => bucket.label),
+            datasets: [
+                {
+                    label: 'Income',
+                    data: safeTrendBuckets.map((bucket) => bucket.income),
+                    borderColor: '#059669',
+                    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+                    pointBackgroundColor: '#059669',
+                    pointBorderColor: '#ECFDF5',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true
+                },
+                {
+                    label: 'Expense',
+                    data: safeTrendBuckets.map((bucket) => bucket.expense),
+                    borderColor: '#EA580C',
+                    backgroundColor: 'rgba(249, 115, 22, 0.14)',
+                    pointBackgroundColor: '#EA580C',
+                    pointBorderColor: '#FFF7ED',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#1E293B', font: { size: 11, weight: '700' }, padding: 14 }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(255,255,255,0.96)',
+                    titleColor: '#0F172A',
+                    bodyColor: '#334155',
+                    borderColor: '#CBD5E1',
+                    borderWidth: 1,
+                    callbacks: {
+                        label(context) {
+                            return `${context.dataset.label}: ${formatCurrencyForPdf(context.raw || 0)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#334155', maxRotation: 0, autoSkip: true, font: { size: 11, weight: '600' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#334155',
+                        font: { size: 11, weight: '600' },
+                        callback(value) {
+                            const numeric = Number(value) || 0;
+                            if (numeric >= 100000) return `${Math.round(numeric / 1000)}k`;
+                            return `${Math.round(numeric)}`;
+                        }
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.16)' }
+                }
+            }
+        }
+    }, 700, 230, '#ffffff');
+
+    return { donutImage, categoryImage, trendImage };
+}
+
+async function buildExcelChartImages(overview, categoryTotals, trendBuckets) {
+    const safeCategories = categoryTotals.filter((category) => category.total > 0).slice(0, 5);
+    const fallbackCategories = safeCategories.length ? safeCategories : [{ label: 'No data', total: 0 }];
+    const safeTrendBuckets = trendBuckets.length ? trendBuckets : [{ label: 'No data', income: 0, expense: 0 }];
+
+    const overviewImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#F8FAFC')],
+        type: 'doughnut',
+        data: {
+            labels: ['Income', 'Expenses', 'Net Amount'],
+            datasets: [{
+                data: [overview.totalIncome, overview.totalExpense, Math.abs(overview.netAmount)],
+                backgroundColor: ['#10B981', '#F97316', '#0EA5E9'],
+                borderColor: ['#047857', '#C2410C', '#0369A1'],
+                borderWidth: 3
+            }]
+        },
+        options: {
+            cutout: '62%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#0F172A', font: { size: 12, weight: '700' }, padding: 12 }
+                }
+            }
+        }
+    }, 360, 260, '#FFFFFF');
+
+    const categoryImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#F8FAFC')],
+        type: 'bar',
+        data: {
+            labels: fallbackCategories.map((category) => category.label),
+            datasets: [{
+                label: 'Category Total',
+                data: fallbackCategories.map((category) => category.total),
+                backgroundColor: ['#14B8A6', '#38BDF8', '#A855F7', '#F59E0B', '#EF4444'],
+                borderRadius: 10,
+                maxBarThickness: 46
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#0F172A', font: { size: 11, weight: '700' } },
+                    grid: { display: false }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#334155',
+                        callback(value) {
+                            const numeric = Number(value) || 0;
+                            if (numeric >= 100000) return `${Math.round(numeric / 1000)}k`;
+                            return `${Math.round(numeric)}`;
+                        }
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.14)' }
+                }
+            }
+        }
+    }, 520, 260, '#FFFFFF');
+
+    const trendImage = await renderPdfChart({
+        plugins: [createChartAreaBackgroundPlugin('#F8FAFC')],
+        type: 'line',
+        data: {
+            labels: safeTrendBuckets.map((bucket) => bucket.label),
+            datasets: [
+                {
+                    label: 'Income',
+                    data: safeTrendBuckets.map((bucket) => bucket.income),
+                    borderColor: '#0F766E',
+                    backgroundColor: 'rgba(20, 184, 166, 0.18)',
+                    pointBackgroundColor: '#0F766E',
+                    pointRadius: 4,
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true
+                },
+                {
+                    label: 'Expense',
+                    data: safeTrendBuckets.map((bucket) => bucket.expense),
+                    borderColor: '#DC2626',
+                    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+                    pointBackgroundColor: '#DC2626',
+                    pointRadius: 4,
+                    borderWidth: 3,
+                    tension: 0.35,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#0F172A', font: { size: 12, weight: '700' }, padding: 16 }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#334155', font: { size: 11, weight: '600' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#334155',
+                        callback(value) {
+                            const numeric = Number(value) || 0;
+                            if (numeric >= 100000) return `${Math.round(numeric / 1000)}k`;
+                            return `${Math.round(numeric)}`;
+                        }
+                    },
+                    grid: { color: 'rgba(148, 163, 184, 0.14)' }
+                }
+            }
+        }
+    }, 900, 320, '#FFFFFF');
+
+    return { overviewImage, categoryImage, trendImage };
+}
+
+async function exportTransactionsToExcel() {
+    const transactionsToExport = getTransactionsForExport();
+    if (!transactionsToExport) return;
+
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined' || typeof Chart === 'undefined') {
+        showToast('Excel export library failed to load', 'error');
+        return;
+    }
+
+    showToast('Generating Excel report...', 'info');
+
+    const rows = applyRunningNetByChronologicalOrder(buildExportRows(transactionsToExport));
+    const generatedAt = new Date();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'GitHub Copilot';
+    workbook.company = 'Expense Tracker';
+    workbook.created = generatedAt;
+
+    const overview = getExportOverview(rows);
+    const categoryTotals = buildExportCategoryTotals(transactionsToExport);
+    const trendBuckets = buildExportTrendBuckets(transactionsToExport);
+    const chartImages = await buildExcelChartImages(overview, categoryTotals, trendBuckets);
+
+    const dashboard = workbook.addWorksheet('Dashboard', {
+        views: [{ showGridLines: false }],
+        properties: { defaultRowHeight: 20 }
+    });
+    dashboard.columns = [
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 },
+        { width: 16 }
+    ];
+
+    dashboard.mergeCells('A1:L1');
+    dashboard.mergeCells('A2:L2');
+    dashboard.mergeCells('A3:L3');
+    const titleCell = dashboard.getCell('A1');
+    titleCell.value = 'Expense Tracker Excel Report';
+    styleExcelCell(titleCell, {
+        font: { name: 'Inter', size: 20, bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F172A' } },
+        alignment: { vertical: 'middle', horizontal: 'left' }
+    });
+    fillExcelRange(dashboard, 1, 3, 1, 12, { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F172A' } });
+    dashboard.getCell('A2').value = `${getExportScopeLabel()} | ${generatedAt.toLocaleString('en-IN')}`;
+    dashboard.getCell('A2').font = { name: 'Inter', size: 11, color: { argb: 'E2E8F0' } };
+    dashboard.getCell('A2').alignment = { vertical: 'middle', horizontal: 'left' };
+    dashboard.getCell('A3').value = `Account: ${getExportUserName()}`;
+    dashboard.getCell('A3').font = { name: 'Inter', size: 11, color: { argb: 'CBD5E1' } };
+    dashboard.getCell('A3').alignment = { vertical: 'middle', horizontal: 'left' };
+
+    const cardConfigs = [
+        { range: 'A5:C8', accent: '10B981', label: 'Income', value: formatCurrencyForExcel(overview.totalIncome) },
+        { range: 'D5:F8', accent: 'EF4444', label: 'Expenses', value: formatCurrencyForExcel(overview.totalExpense) },
+        { range: 'G5:I8', accent: overview.netAmount >= 0 ? '10B981' : 'EF4444', label: 'Net Amount', value: formatCurrencyForExcel(overview.netAmount) },
+        { range: 'J5:L8', accent: 'A855F7', label: 'Transactions', value: String(overview.transactionCount) }
+    ];
+
+    cardConfigs.forEach((card) => {
+        dashboard.mergeCells(card.range);
+        const startCell = card.range.split(':')[0];
+        const block = dashboard.getCell(startCell);
+        block.value = `${card.label}\n${card.value}`;
+        block.alignment = { wrapText: true, vertical: 'middle', horizontal: 'left' };
+        block.font = { name: 'Inter', size: 13, bold: true, color: { argb: '0F172A' } };
+        const { row, col } = block;
+        fillExcelRange(dashboard, row, row + 3, col, col + 2, { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } });
+        for (let r = row; r <= row + 3; r += 1) {
+            for (let c = col; c <= col + 2; c += 1) {
+                addExcelBorder(dashboard.getRow(r).getCell(c), 'D7E0EA');
+            }
+        }
+        fillExcelRange(dashboard, row, row, col, col + 2, { type: 'pattern', pattern: 'solid', fgColor: { argb: card.accent } });
+        dashboard.getCell(startCell).font = { name: 'Inter', size: 13, bold: true, color: { argb: '0F172A' } };
+    });
+
+    dashboard.mergeCells('A10:F24');
+    dashboard.mergeCells('G10:L24');
+    fillExcelRange(dashboard, 10, 24, 1, 6, { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } });
+    fillExcelRange(dashboard, 10, 24, 7, 12, { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } });
+    for (let r = 10; r <= 24; r += 1) {
+        for (let c = 1; c <= 12; c += 1) {
+            addExcelBorder(dashboard.getRow(r).getCell(c), 'D7E0EA');
+        }
+    }
+    dashboard.getCell('A10').value = 'Overview';
+    dashboard.getCell('G10').value = 'Top Categories';
+    dashboard.getCell('A10').font = dashboard.getCell('G10').font = { name: 'Inter', size: 14, bold: true, color: { argb: '0F172A' } };
+
+    dashboard.mergeCells('A26:L43');
+    fillExcelRange(dashboard, 26, 43, 1, 12, { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF' } });
+    for (let r = 26; r <= 43; r += 1) {
+        for (let c = 1; c <= 12; c += 1) {
+            addExcelBorder(dashboard.getRow(r).getCell(c), 'D7E0EA');
+        }
+    }
+    dashboard.getCell('A26').value = 'Trend Overview';
+    dashboard.getCell('A26').font = { name: 'Inter', size: 14, bold: true, color: { argb: '0F172A' } };
+
+    const overviewImageId = workbook.addImage({ base64: chartImages.overviewImage, extension: 'png' });
+    const categoryImageId = workbook.addImage({ base64: chartImages.categoryImage, extension: 'png' });
+    const trendImageId = workbook.addImage({ base64: chartImages.trendImage, extension: 'png' });
+    dashboard.addImage(overviewImageId, 'A11:F24');
+    dashboard.addImage(categoryImageId, 'G11:L24');
+    dashboard.addImage(trendImageId, 'A27:L43');
+
+    const details = workbook.addWorksheet('Transactions', {
+        views: [{ state: 'frozen', ySplit: 1 }],
+        properties: { defaultRowHeight: 20 }
+    });
+    details.columns = [
+        { header: 'S.No.', key: 'serial', width: 8 },
+        { header: 'Date', key: 'date', width: 16 },
+        { header: 'Type', key: 'type', width: 14 },
+        { header: 'Category', key: 'category', width: 22 },
+        { header: 'Description', key: 'description', width: 38 },
+        { header: 'Amount', key: 'amountDisplay', width: 18 },
+        { header: 'Net Balance', key: 'excelRunningNetDisplay', width: 18 }
+    ];
+
+    details.getRow(1).height = 24;
+    details.getRow(1).eachCell((cell) => {
+        styleExcelCell(cell, {
+            font: { name: 'Inter', size: 11, bold: true, color: { argb: 'FFFFFFFF' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F172A' } },
+            alignment: { vertical: 'middle', horizontal: 'center' }
+        });
+        addExcelBorder(cell, 'CBD5E1');
+    });
+
+    rows.forEach((row) => {
+        const addedRow = details.addRow({
+            serial: row.serial,
+            date: row.date ? formatDate(row.date) : '-',
+            type: row.type,
+            category: row.category,
+            description: row.description,
+            amountDisplay: row.excelAmountDisplay,
+            excelRunningNetDisplay: row.excelRunningNetDisplay
+        });
+
+        addedRow.eachCell((cell, colNumber) => {
+            addExcelBorder(cell, 'D7E0EA');
+            cell.alignment = { vertical: 'middle', horizontal: colNumber >= 6 ? 'right' : 'left' };
+            cell.font = { name: 'Inter', size: 10, color: { argb: '1E293B' } };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: addedRow.number % 2 === 0 ? 'F8FAFC' : 'FFFFFF' }
+            };
+        });
+
+        const typeCell = addedRow.getCell(3);
+        typeCell.font = {
+            name: 'Inter',
+            size: 10,
+            bold: true,
+            color: { argb: row.type === 'Income' ? '047857' : 'DC2626' }
+        };
+
+        const amountCell = addedRow.getCell(7);
+        amountCell.font = {
+            name: 'Inter',
+            size: 10,
+            bold: true,
+            color: { argb: row.runningNet >= 0 ? '047857' : 'DC2626' }
+        };
+
+        const signedAmountCell = addedRow.getCell(6);
+        signedAmountCell.font = {
+            name: 'Inter',
+            size: 10,
+            bold: true,
+            color: { argb: row.signedAmount >= 0 ? '047857' : 'DC2626' }
+        };
+    });
+
+    const totalsRow = details.addRow({
+        description: 'Totals',
+        amountDisplay: formatCurrencyForExcel(overview.totalExpense),
+        excelRunningNetDisplay: makeSignedCurrencyDisplay(overview.netAmount, formatCurrencyForExcel)
+    });
+    totalsRow.getCell(4).value = 'Total Expenses';
+    totalsRow.getCell(5).value = `Income: ${formatCurrencyForExcel(overview.totalIncome)}`;
+    totalsRow.eachCell((cell) => {
+        styleExcelCell(cell, {
+            font: { name: 'Inter', size: 11, bold: true, color: { argb: '0F172A' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DBEAFE' } },
+            alignment: { vertical: 'middle', horizontal: 'left' }
+        });
+        addExcelBorder(cell, '93C5FD');
+    });
+    totalsRow.getCell(6).alignment = { horizontal: 'right' };
+    totalsRow.getCell(7).alignment = { horizontal: 'right' };
+    totalsRow.getCell(7).font = {
+        name: 'Inter',
+        size: 11,
+        bold: true,
+        color: { argb: overview.netAmount >= 0 ? '047857' : 'DC2626' }
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), buildExportFileName('xlsx'));
+
+    showToast('Excel analytics report exported successfully', 'success');
+}
+
+async function exportTransactionsToPDF() {
+    const transactionsToExport = getTransactionsForExport();
+    if (!transactionsToExport) return;
+
+    if (!window.jspdf?.jsPDF || typeof Chart === 'undefined') {
+        showToast('PDF export library failed to load', 'error');
+        return;
+    }
+
+    showToast('Generating PDF report...', 'info');
+
+    const { jsPDF } = window.jspdf;
+    const rows = applyRunningNetByChronologicalOrder(buildExportRows(transactionsToExport));
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const scopeLabel = getExportScopeLabel();
+    const generatedAt = new Date();
+    const summary = buildPdfSummary(transactionsToExport, rows);
+    const categoryTotals = buildExportCategoryTotals(transactionsToExport);
+    const trendBuckets = buildExportTrendBuckets(transactionsToExport);
+    const insights = buildPdfInsights(transactionsToExport, summary, categoryTotals);
+    const { donutImage, categoryImage, trendImage } = await buildPdfChartImages(summary, categoryTotals, trendBuckets);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+
+    pdf.setFillColor(15, 23, 42);
+    pdf.rect(0, 0, pageWidth, 122, 'F');
+    pdf.setTextColor(248, 250, 252);
+    pdf.setFontSize(22);
+    pdf.text('Expense Tracker Report', 40, 42);
+    pdf.setFontSize(11);
+    pdf.text(scopeLabel, 40, 62);
+    pdf.text(`Generated ${generatedAt.toLocaleString('en-IN')}`, 40, 79);
+    drawPdfFittedText(pdf, `Account: ${getExportUserName()}`, 40, 96, pageWidth - 80, { fontSize: 11, minFontSize: 8 });
+
+    const summaryCards = [
+        { label: 'Income', value: formatCurrencyForPdf(summary.totalIncome), accent: [34, 197, 94] },
+        { label: 'Expenses', value: formatCurrencyForPdf(summary.totalExpense), accent: [239, 68, 68] },
+        { label: 'Net Amount', value: formatCurrencyForPdf(summary.net), accent: summary.net >= 0 ? [34, 197, 94] : [239, 68, 68] },
+        { label: 'Transactions', value: String(summary.count), accent: [245, 158, 11] }
+    ];
+
+    summaryCards.forEach((card, index) => {
+        const x = 40 + (index * 132);
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(x, 138, 118, 72, 12, 12, 'F');
+        pdf.setFillColor(card.accent[0], card.accent[1], card.accent[2]);
+        pdf.roundedRect(x, 138, 118, 6, 6, 6, 'F');
+        pdf.setTextColor(100, 116, 139);
+        pdf.setFontSize(10);
+        pdf.text(card.label, x + 12, 164);
+        pdf.setTextColor(15, 23, 42);
+        drawPdfFittedText(pdf, card.value, x + 12, 188, 94, { fontSize: 13, minFontSize: 8 });
+    });
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(40, 228, 250, 210, 16, 16, 'F');
+    pdf.roundedRect(306, 228, 249, 210, 16, 16, 'F');
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFontSize(13);
+    pdf.text('Income vs Expense Mix', 56, 252);
+    pdf.text('Top Categories', 322, 252);
+    pdf.addImage(donutImage, 'PNG', 58, 266, 214, 148);
+    pdf.addImage(categoryImage, 'PNG', 320, 266, 220, 148);
+
+    pdf.roundedRect(40, 454, 515, 158, 16, 16, 'F');
+    pdf.setFontSize(13);
+    pdf.text('Trend Overview', 56, 478);
+    pdf.addImage(trendImage, 'PNG', 52, 490, 492, 112);
+
+    pdf.addPage();
+    pdf.setFillColor(248, 250, 252);
+    pdf.rect(0, 0, pageWidth, pdf.internal.pageSize.getHeight(), 'F');
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFontSize(18);
+    pdf.text('Highlights', 40, 44);
+
+    const metaBlocks = [
+        `Date range: ${summary.firstDate ? `${formatDate(summary.firstDate)} to ${formatDate(summary.lastDate)}` : 'N/A'}`,
+        `Coverage: ${summary.daysCovered} day${summary.daysCovered === 1 ? '' : 's'} in current view`,
+        `Average expense per day: ${formatCurrencyForPdf(summary.averagePerDay)}`
+    ];
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(40, 60, 515, 86, 14, 14, 'F');
+    pdf.setFontSize(11);
+    pdf.setTextColor(51, 65, 85);
+    metaBlocks.forEach((line, index) => {
+        pdf.text(line, 56, 86 + (index * 20));
+    });
+
+    pdf.setFontSize(14);
+    pdf.setTextColor(15, 23, 42);
+    pdf.text('Key insights', 40, 178);
+    pdf.setFontSize(11);
+    pdf.setTextColor(51, 65, 85);
+    let insightsCursorY = 206;
+    insights.forEach((insight) => {
+        const wrappedInsight = pdf.splitTextToSize(insight, 470);
+        pdf.setFillColor(34, 197, 94);
+        pdf.circle(48, insightsCursorY - 4, 3, 'F');
+        pdf.text(wrappedInsight, 60, insightsCursorY);
+        insightsCursorY += (wrappedInsight.length * 14) + 10;
+    });
+
+    const tableStartY = insights.length ? insightsCursorY + 8 : 206;
+    pdf.setFontSize(18);
+    pdf.setTextColor(15, 23, 42);
+    pdf.text('Transactions', 40, tableStartY);
+
+    pdf.autoTable({
+        startY: tableStartY + 14,
+        head: [['S.No.', 'Date', 'Type', 'Category', 'Description', 'Amount', 'Net Balance']],
+        body: rows.map((row) => ([
+            row.serial,
+            row.date ? formatDate(row.date) : '-',
+            row.type,
+            row.category,
+            row.description,
+            row.amountDisplay,
+            row.runningNetDisplay
+        ])),
+        theme: 'grid',
+        headStyles: {
+            fillColor: [15, 23, 42],
+            textColor: [248, 250, 252],
+            fontSize: 10,
+            fontStyle: 'bold'
+        },
+        bodyStyles: {
+            textColor: [30, 41, 59],
+            fontSize: 9,
+            cellPadding: 6
+        },
+        alternateRowStyles: {
+            fillColor: [248, 250, 252]
+        },
+        styles: { overflow: 'linebreak', lineColor: [226, 232, 240], lineWidth: 0.5 },
+        columnStyles: {
+            0: { cellWidth: 36 },
+            1: { cellWidth: 66 },
+            2: { cellWidth: 50 },
+            3: { cellWidth: 72 },
+            4: { cellWidth: 145 },
+            5: { cellWidth: 58, halign: 'right' },
+            6: { cellWidth: 68, halign: 'right' }
+        },
+        margin: { left: 40, right: 40, bottom: 42 },
+        didParseCell(data) {
+            if (data.section === 'body' && data.column.index === 2) {
+                const value = String(data.cell.raw || '').toLowerCase();
+                if (value === 'income') {
+                    data.cell.styles.textColor = [22, 163, 74];
+                    data.cell.styles.fontStyle = 'bold';
+                } else if (value === 'expense') {
+                    data.cell.styles.textColor = [220, 38, 38];
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+
+            if (data.section === 'body' && data.column.index === 5) {
+                const rawAmount = String(data.cell.raw || '');
+                data.cell.styles.textColor = rawAmount.startsWith('+') ? [22, 163, 74] : [220, 38, 38];
+                data.cell.styles.fontStyle = 'bold';
+            }
+
+            if (data.section === 'body' && data.column.index === 6) {
+                const raw = String(data.cell.raw || '');
+                data.cell.styles.textColor = raw.startsWith('+') ? [22, 163, 74] : [220, 38, 38];
+                data.cell.styles.fontStyle = 'bold';
+            }
+        }
+    });
+
+    addPdfFooter(pdf);
+
+    pdf.save(buildExportFileName('pdf'));
+
+    showToast('PDF analytics report exported successfully', 'success');
 }
 
 function addImportButton() {

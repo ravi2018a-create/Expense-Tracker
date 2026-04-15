@@ -19,6 +19,7 @@ CREATE TABLE public.transactions (
   category TEXT NOT NULL,
   type TEXT CHECK (type IN ('income', 'expense')) NOT NULL,
   date DATE NOT NULL,
+  return_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

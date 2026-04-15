@@ -411,6 +411,38 @@ function getCommonTxnCategoryValues() {
     return new Set([...expenseSet].filter(value => incomeSet.has(value)));
 }
 
+function getTransactionReturnDate(transaction) {
+    return transaction?.returnDate || transaction?.return_date || '';
+}
+
+function shouldShowReturnDateForCategory(categoryValue) {
+    if (!categoryValue) return false;
+    return getCommonTxnCategoryValues().has(categoryValue);
+}
+
+function updateReturnDateFieldVisibility(options = {}) {
+    const {
+        typeSelectId,
+        categorySelectId,
+        groupId,
+        inputId
+    } = options;
+
+    const typeSelect = document.getElementById(typeSelectId);
+    const categorySelect = document.getElementById(categorySelectId);
+    const group = document.getElementById(groupId);
+    const input = document.getElementById(inputId);
+
+    if (!typeSelect || !categorySelect || !group || !input) return;
+
+    const showField = shouldShowReturnDateForCategory(categorySelect.value);
+    group.style.display = showField ? '' : 'none';
+
+    if (!showField) {
+        input.value = '';
+    }
+}
+
 function normalizeTxnCategoryValue(name) {
     return name
         .toLowerCase()
@@ -509,13 +541,35 @@ function setupCategoryTypeSync() {
     const editTypeSelect = document.getElementById('editType');
     const editCatSelect = document.getElementById('editTxnCategory');
 
+    const syncAddReturnDateVisibility = () => {
+        updateReturnDateFieldVisibility({
+            typeSelectId: 'type',
+            categorySelectId: 'txnCategory',
+            groupId: 'returnDateGroup',
+            inputId: 'returnDate'
+        });
+    };
+
+    const syncEditReturnDateVisibility = () => {
+        updateReturnDateFieldVisibility({
+            typeSelectId: 'editType',
+            categorySelectId: 'editTxnCategory',
+            groupId: 'editReturnDateGroup',
+            inputId: 'editReturnDate'
+        });
+    };
+
     if (typeSelect && catSelect) {
         // Populate on load
         populateCategorySelect('txnCategory', typeSelect.value);
+        syncAddReturnDateVisibility();
         // Re-populate on type change
         typeSelect.addEventListener('change', () => {
             populateCategorySelect('txnCategory', typeSelect.value);
+            syncAddReturnDateVisibility();
         });
+
+        catSelect.addEventListener('change', syncAddReturnDateVisibility);
 
         const addTxnCategoryBtn = document.getElementById('addTxnCategoryBtn');
         const deleteTxnCategoryBtn = document.getElementById('deleteTxnCategoryBtn');
@@ -529,8 +583,10 @@ function setupCategoryTypeSync() {
                 if (!addedValue) return;
 
                 populateCategorySelect('txnCategory', typeSelect.value, addedValue);
+                syncAddReturnDateVisibility();
                 if (editTypeSelect && editCatSelect) {
                     populateCategorySelect('editTxnCategory', editTypeSelect.value, editCatSelect.value);
+                    syncEditReturnDateVisibility();
                 }
                 showToast('Category added', 'success');
             });
@@ -549,8 +605,10 @@ function setupCategoryTypeSync() {
                 if (!deleted) return;
 
                 populateCategorySelect('txnCategory', typeSelect.value);
+                syncAddReturnDateVisibility();
                 if (editTypeSelect && editCatSelect) {
                     populateCategorySelect('editTxnCategory', editTypeSelect.value, editCatSelect.value);
+                    syncEditReturnDateVisibility();
                 }
                 showToast('Category deleted', 'info');
             });
@@ -560,10 +618,14 @@ function setupCategoryTypeSync() {
     if (editTypeSelect && editCatSelect) {
         // Populate on load
         populateCategorySelect('editTxnCategory', editTypeSelect.value);
+        syncEditReturnDateVisibility();
         // Re-populate on type change
         editTypeSelect.addEventListener('change', () => {
             populateCategorySelect('editTxnCategory', editTypeSelect.value);
+            syncEditReturnDateVisibility();
         });
+
+        editCatSelect.addEventListener('change', syncEditReturnDateVisibility);
 
         const addEditTxnCategoryBtn = document.getElementById('addEditTxnCategoryBtn');
         const deleteEditTxnCategoryBtn = document.getElementById('deleteEditTxnCategoryBtn');
@@ -577,8 +639,10 @@ function setupCategoryTypeSync() {
                 if (!addedValue) return;
 
                 populateCategorySelect('editTxnCategory', editTypeSelect.value, addedValue);
+                syncEditReturnDateVisibility();
                 if (typeSelect && catSelect) {
                     populateCategorySelect('txnCategory', typeSelect.value, catSelect.value);
+                    syncAddReturnDateVisibility();
                 }
                 showToast('Category added', 'success');
             });
@@ -597,8 +661,10 @@ function setupCategoryTypeSync() {
                 if (!deleted) return;
 
                 populateCategorySelect('editTxnCategory', editTypeSelect.value);
+                syncEditReturnDateVisibility();
                 if (typeSelect && catSelect) {
                     populateCategorySelect('txnCategory', typeSelect.value, catSelect.value);
+                    syncAddReturnDateVisibility();
                 }
                 showToast('Category deleted', 'info');
             });
@@ -2510,7 +2576,8 @@ async function saveSingleTransaction(transaction, options = {}) {
                 amount: transaction.amount,
                 category: transaction.category,
                 type: transaction.type,
-                date: transaction.date
+                date: transaction.date,
+                return_date: transaction.returnDate || null
             };
 
             const authData = localStorage.getItem('expense-tracker-auth');
@@ -2847,9 +2914,11 @@ async function handleAddTransaction(e) {
     const type = document.getElementById('type').value;
     const dateInput = document.getElementById('date').value;
     const txnCategory = document.getElementById('txnCategory')?.value || type;
+    const returnDateInput = document.getElementById('returnDate')?.value || '';
     
     // Use the selected transaction category
     const category = txnCategory;
+    const returnDate = shouldShowReturnDateForCategory(category) ? (returnDateInput || null) : null;
     
     // Ensure date is in YYYY-MM-DD format
     let date = dateInput;
@@ -2877,6 +2946,7 @@ async function handleAddTransaction(e) {
         category: category,
         type: type,
         date: date,
+        returnDate: returnDate,
         createdAt: new Date().toISOString()
     };
     
@@ -2933,9 +3003,19 @@ function editTransaction(id) {
     document.getElementById('editAmount').value = transaction.amount;
     document.getElementById('editType').value = transaction.type;
     document.getElementById('editDate').value = transaction.date;
+    const editReturnDateInput = document.getElementById('editReturnDate');
+    if (editReturnDateInput) {
+        editReturnDateInput.value = getTransactionReturnDate(transaction);
+    }
     
     // Populate category dropdown based on type, then set value
     populateCategorySelect('editTxnCategory', transaction.type, transaction.category || transaction.type);
+    updateReturnDateFieldVisibility({
+        typeSelectId: 'editType',
+        categorySelectId: 'editTxnCategory',
+        groupId: 'editReturnDateGroup',
+        inputId: 'editReturnDate'
+    });
     
     // Show modal
     document.getElementById('editModal').style.display = 'flex';
@@ -2950,8 +3030,10 @@ async function handleEditTransaction(e) {
     
     const type = document.getElementById('editType').value;
     const txnCategory = document.getElementById('editTxnCategory')?.value || type;
+    const editReturnDateInput = document.getElementById('editReturnDate')?.value || '';
     // Use selected transaction category
     const category = txnCategory;
+    const returnDate = shouldShowReturnDateForCategory(category) ? (editReturnDateInput || null) : null;
     
     const updatedTransaction = {
         id: id,
@@ -2960,6 +3042,7 @@ async function handleEditTransaction(e) {
         category: category,
         type: type,
         date: document.getElementById('editDate').value,
+        returnDate: returnDate,
         createdAt: existingTransaction?.createdAt || existingTransaction?.created_at || new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
@@ -2996,7 +3079,8 @@ async function handleEditTransaction(e) {
                         amount: updatedTransaction.amount,
                         category: updatedTransaction.category,
                         type: updatedTransaction.type,
-                        date: updatedTransaction.date
+                        date: updatedTransaction.date,
+                        return_date: updatedTransaction.returnDate || null
                     };
                     
                     const response = await fetch(`${SUPABASE_URL}/rest/v1/transactions?id=eq.${id}`, {
@@ -4646,6 +4730,9 @@ function renderTransactions() {
         const safeTxnId = escapeHtml(transaction.id);
         const safeDescription = escapeHtml(transaction.description);
         const safeDateLabel = escapeHtml(formatDate(transaction.date));
+        const returnDateValue = getTransactionReturnDate(transaction);
+        const safeReturnDateLabel = returnDateValue ? escapeHtml(formatDate(returnDateValue)) : '';
+        const returnDateMeta = safeReturnDateLabel ? ` • Return: ${safeReturnDateLabel}` : '';
         const safeCatLabel = escapeHtml(catLabel);
         const safeCatIcon = escapeHtml(catIcon);
         return `
@@ -4656,7 +4743,7 @@ function renderTransactions() {
                 </div>
                 <div class="transaction-info">
                     <h4>${safeDescription}</h4>
-                    <p>${safeDateLabel} • <span class="txn-category-label ${catTheme}">${safeCatLabel}</span></p>
+                    <p>${safeDateLabel}${returnDateMeta} • <span class="txn-category-label ${catTheme}">${safeCatLabel}</span></p>
                 </div>
             </div>
             <div class="transaction-amount ${safeType}">
